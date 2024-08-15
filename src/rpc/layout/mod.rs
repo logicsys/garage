@@ -231,9 +231,6 @@ mod v010 {
 	use std::collections::BTreeMap;
 	pub use v09::{LayoutParameters, NodeRole, NodeRoleV, ZoneRedundancy};
 
-	/// Number of old (non-live) versions to keep, see LayoutHistory::old_versions
-	pub const OLD_VERSION_COUNT: usize = 5;
-
 	/// The history of cluster layouts, with trackers to keep a record
 	/// of which nodes are up-to-date to current cluster data
 	#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

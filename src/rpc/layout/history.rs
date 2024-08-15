@@ -107,11 +107,6 @@ impl LayoutHistory {
 			);
 			self.old_versions.push(removed);
 		}
-
-		while self.old_versions.len() > OLD_VERSION_COUNT {
-			let removed = self.old_versions.remove(0);
-			info!("Layout history: removing old_version {}", removed.version);
-		}
 	}
 
 	pub(crate) fn clamp_update_trackers(&mut self, nodes: &[Uuid]) {
@@ -230,7 +225,7 @@ impl LayoutHistory {
 		let mut changed = false;
 
 		// Add any new versions to history
-		for v2 in other.versions.iter() {
+		for v2 in other.old_versions.iter().chain(other.versions.iter()) {
 			if let Some(v1) = self.versions.iter().find(|v| v.version == v2.version) {
 				// Version is already present, check consistency
 				if v1 != v2 {
