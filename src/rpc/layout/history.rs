@@ -226,12 +226,22 @@ impl LayoutHistory {
 
 		// Add any new versions to history
 		for v2 in other.old_versions.iter().chain(other.versions.iter()) {
-			if let Some(v1) = self.old_versions.iter().chain(self.versions.iter()).find(|v| v.version == v2.version) {
+			if let Some(v1) = self
+				.old_versions
+				.iter()
+				.chain(self.versions.iter())
+				.find(|v| v.version == v2.version)
+			{
 				// Version is already present, check consistency
 				if v1 != v2 {
 					error!("Inconsistent layout histories: different layout compositions for version {}. Your cluster will be broken as long as this layout version is not replaced.", v2.version);
 				}
-			} else if self.old_versions.iter().chain(self.versions.iter()).all(|v| v.version != v2.version - 1) {
+			} else if self
+				.old_versions
+				.iter()
+				.chain(self.versions.iter())
+				.all(|v| v.version != v2.version - 1)
+			{
 				error!(
 					"Cannot receive new layout version {}, version {} is missing",
 					v2.version,
