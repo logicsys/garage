@@ -317,7 +317,8 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 				&who,
 				rpc,
 				RequestStrategy::with_priority(PRIO_NORMAL)
-					.with_quorum(self.data.replication.read_quorum()),
+					.with_quorum(self.data.replication.read_quorum())
+					.with_preemptive_send(true),
 			)
 			.await?;
 
@@ -412,7 +413,8 @@ impl<F: TableSchema, R: TableReplication> Table<F, R> {
 				&who,
 				rpc,
 				RequestStrategy::with_priority(PRIO_NORMAL)
-					.with_quorum(self.data.replication.read_quorum()),
+					.with_quorum(self.data.replication.read_quorum())
+					.with_preemptive_send(true),
 			)
 			.await?;
 
