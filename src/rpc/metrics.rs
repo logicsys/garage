@@ -4,6 +4,8 @@ use opentelemetry::{global, metrics::*};
 pub struct RpcMetrics {
 	pub(crate) rpc_counter: Counter<u64>,
 	pub(crate) rpc_timeout_counter: Counter<u64>,
+	pub(crate) rpc_watchdogs_started_counter: Counter<u64>,
+	pub(crate) rpc_watchdogs_preemption_counter: Counter<u64>,
 	pub(crate) rpc_netapp_error_counter: Counter<u64>,
 	pub(crate) rpc_garage_error_counter: Counter<u64>,
 
@@ -20,6 +22,14 @@ impl RpcMetrics {
 			rpc_timeout_counter: meter
 				.u64_counter("rpc.timeout_counter")
 				.with_description("Number of RPC timeouts")
+				.init(),
+			rpc_watchdogs_started_counter: meter
+				.u64_counter("rpc.watchdogs_started_counter")
+				.with_description("Number of RPC requests started with a watchdog")
+				.init(),
+			rpc_watchdogs_preemption_counter: meter
+				.u64_counter("rpc.watchdogs_preemption_counter")
+				.with_description("Number of RPC watchdogs which timed out and caused an extra RPC to be scheduled")
 				.init(),
 			rpc_netapp_error_counter: meter
 				.u64_counter("rpc.netapp_error_counter")
