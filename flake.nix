@@ -71,6 +71,7 @@
                 rustfmt
                 clang
                 mold
+                cargo2nix.packages.${system}.default
               ]);
 
             # import the full shell using `nix develop .#full`
@@ -79,6 +80,7 @@
               rust-analyzer
               clang
               mold
+              cargo2nix.packages.${system}.default
               # ---- extra packages for dev tasks ----
               cargo-audit
               cargo-outdated
