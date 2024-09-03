@@ -201,7 +201,10 @@ impl ApiHandler for S3ApiServer {
 					response_content_type,
 					response_expires,
 				};
-				handle_get(ctx, &req, &key, part_number, overrides).await
+				// Redirects are flattened over the S3 API as per:
+				// https://docs.aws.amazon.com/AmazonS3/latest/userguide/how-to-page-redirect.html
+				// > REST endpoint – Amazon S3 doesn't redirect the page request. It returns the requested object.
+				handle_get(ctx, &req, &key, part_number, overrides, true).await
 			}
 			Endpoint::UploadPart {
 				key,

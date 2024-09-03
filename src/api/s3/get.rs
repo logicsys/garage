@@ -280,22 +280,25 @@ pub async fn handle_head_without_ctx(
 /// Handle GET request
 pub async fn handle_get(
 	ctx: ReqCtx,
-	req: &Request<impl Body>,
+	req: &Request<impl Body + std::marker::Sync>,
 	key: &str,
 	part_number: Option<u64>,
 	overrides: GetObjectOverrides,
+	flatten_redirect: bool
 ) -> Result<Response<ResBody>, Error> {
-	handle_get_without_ctx(ctx.garage, req, ctx.bucket_id, key, part_number, overrides).await
+	handle_get_without_ctx(ctx.garage, req, ctx.bucket_id, key, part_number, overrides, flatten_redirect).await
 }
 
 /// Handle GET request
+#[async_recursion::async_recursion]
 pub async fn handle_get_without_ctx(
 	garage: Arc<Garage>,
-	req: &Request<impl Body>,
+	req: &Request<impl Body + std::marker::Sync>,
 	bucket_id: Uuid,
 	key: &str,
 	part_number: Option<u64>,
 	overrides: GetObjectOverrides,
+	flatten_redirect: bool
 ) -> Result<Response<ResBody>, Error> {
 	let object = garage
 		.object_table
@@ -328,6 +331,30 @@ pub async fn handle_get_without_ctx(
 		EncryptionParams::check_decrypt(&garage, req.headers(), &last_v_meta.encryption)?;
 
 	let checksum_mode = checksum_mode(&req);
+
+	if let Some(redirect_hdr) = headers
+		.headers
+		.iter()
+		.find(|(k, _)| k == "x-amz-website-redirect-location")
+		.map(|(_, v)| v)
+	{
+		if flatten_redirect {
+			return handle_get_without_ctx(garage,
+				req,
+				bucket_id,
+				redirect_hdr,
+				part_number,
+				overrides,
+				flatten_redirect
+			).await;
+		} else {
+			return Ok(Response::builder()
+					.status(StatusCode::FOUND)
+					.header("Location", redirect_hdr)
+					.body(empty_body())
+					.unwrap());
+		}
+	}
 
 	match (part_number, parse_range_header(req, last_v_meta.size)?) {
 		(Some(_), Some(_)) => Err(Error::bad_request(

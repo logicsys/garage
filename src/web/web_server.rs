@@ -249,6 +249,9 @@ impl WebServer {
 				handle_head_without_ctx(self.garage.clone(), req, bucket_id, &key, None).await
 			}
 			Method::GET => {
+				// Redirects are not flattened in the web API, as per:
+				// https://docs.aws.amazon.com/AmazonS3/latest/userguide/how-to-page-redirect.html
+				// > Region-specific website endpoint – Amazon S3 redirects the page request according to the value of the x-amz-website-redirect-location property.
 				handle_get_without_ctx(
 					self.garage.clone(),
 					req,
@@ -256,6 +259,7 @@ impl WebServer {
 					&key,
 					None,
 					Default::default(),
+					false
 				)
 				.await
 			}
@@ -309,6 +313,7 @@ impl WebServer {
 					&error_document,
 					None,
 					Default::default(),
+					false
 				)
 				.await
 				{

@@ -181,6 +181,16 @@ async fn test_website_s3_api() {
 		.await
 		.unwrap();
 
+	ctx.client
+		.put_object()
+		.bucket(&bucket)
+		.key("site/home-redirected.html")
+		.website_redirect_location("/site/home.html")
+		.body(ByteStream::from_static(&[]))
+		.send()
+		.await
+		.unwrap();
+
 	let conf = WebsiteConfiguration::builder()
 		.index_document(
 			IndexDocument::builder()
@@ -271,6 +281,29 @@ async fn test_website_s3_api() {
 		assert_eq!(
 			resp.into_body().collect().await.unwrap().to_bytes(),
 			BODY.as_ref()
+		);
+	}
+
+	// Test redirection with CORS
+	{
+		let req = Request::builder()
+			.method("GET")
+			.uri(format!("http://127.0.0.1:{}/site/home-redirected.html", ctx.garage.web_port))
+			.header("Host", format!("{}.web.garage", BCKT_NAME))
+			.header("Origin", "https://example.com")
+			.body(Body::new(Bytes::new()))
+			.unwrap();
+
+		let resp = client.request(req).await.unwrap();
+
+		assert!(resp.status().is_redirection());
+		assert_eq!(
+			resp.headers().get("access-control-allow-origin").unwrap(),
+			"*"
+		);
+		assert_eq!(
+			resp.headers().get(http::header::LOCATION).unwrap(),
+			"/site/home.html"
 		);
 	}
 

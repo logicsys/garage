@@ -68,6 +68,7 @@ quick-xml.workspace = true
 opentelemetry.workspace = true
 opentelemetry-prometheus = { workspace = true, optional = true }
 prometheus = { workspace = true, optional = true }
+async-recursion = "1.1.1"
 
 [features]
 k2v = [ "garage_util/k2v", "garage_model/k2v" ]
