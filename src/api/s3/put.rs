@@ -618,9 +618,11 @@ pub(crate) fn get_headers(headers: &HeaderMap<HeaderValue>) -> Result<HeaderList
 		}
 	}
 
-	// Preserve x-amz-meta- headers
+	// Preserve x-amz-meta- and x-amz-website-redirect-location headers
 	for (name, value) in headers.iter() {
-		if name.as_str().starts_with("x-amz-meta-") {
+		if name.as_str().starts_with("x-amz-meta-")
+			|| name.as_str() == "x-amz-website-redirect-location"
+		{
 			ret.push((
 				name.to_string(),
 				std::str::from_utf8(value.as_bytes())?.to_string(),
