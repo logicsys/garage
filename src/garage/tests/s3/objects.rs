@@ -3,6 +3,8 @@ use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{Delete, ObjectIdentifier};
 
 const STD_KEY: &str = "hello world";
+const REDIRECT_KEY: &str = "redirected";
+const FURTHER_REDIRECT_KEY: &str = "redirected 2";
 const CTRL_KEY: &str = "\x00\x01\x02\x00";
 const UTF8_KEY: &str = "\u{211D}\u{1F923}\u{1F44B}";
 const BODY: &[u8; 62] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -403,4 +405,118 @@ async fn test_deleteobject() {
 		.send()
 		.await
 		.unwrap();
+}
+
+#[tokio::test]
+async fn test_redirections() {
+	let ctx = common::context();
+	let bucket = ctx.create_bucket("redirections");
+
+	{
+		let etag = "\"49f68a5c8493ec2c0bf489821c21fc3b\"";
+		let empty_etag = "\"d41d8cd98f00b204e9800998ecf8427e\"";
+		let content_type = "text/csv";
+		let data = ByteStream::from_static(b"hi");
+
+
+		{
+			// Send an empty object (can serve as a directory marker)
+			// with a content type
+			let r = ctx
+				.client
+				.put_object()
+				.bucket(&bucket)
+				.key(STD_KEY)
+				.body(data)
+				.content_type(content_type)
+				.send()
+				.await
+				.unwrap();
+
+			assert_eq!(r.e_tag.unwrap().as_str(), etag);
+			// We return a version ID here
+			// We should check if Amazon is returning one when versioning is not enabled
+			assert!(r.version_id.is_some());
+		}
+
+		{
+			// Send an empty redirected object.
+			let r = ctx
+				.client
+				.put_object()
+				.bucket(&bucket)
+				.key(REDIRECT_KEY)
+				.website_redirect_location(STD_KEY)
+				.send()
+				.await
+				.unwrap();
+
+			// A redirected object remains an object in the end.
+			assert_eq!(r.e_tag.unwrap().as_str(), empty_etag);
+			// We return a version ID here
+			// We should check if Amazon is returning one when versioning is not enabled
+			assert!(r.version_id.is_some());
+
+
+			let o = ctx
+				.client
+				.get_object()
+				.bucket(&bucket)
+				.key(REDIRECT_KEY)
+				.send()
+				.await
+				.unwrap();
+
+			assert_bytes_eq!(o.body, b"hi");
+			assert_eq!(o.e_tag.unwrap(), etag);
+			// We do not return version ID
+			// We should check if Amazon is returning one when versioning is not enabled
+			// assert_eq!(o.version_id.unwrap(), _version);
+			assert_eq!(o.content_type.unwrap(), content_type);
+			assert!(o.last_modified.is_some());
+			assert_eq!(o.content_length.unwrap(), 2);
+			assert_eq!(o.parts_count, None);
+			assert_eq!(o.tag_count, None);
+		}
+
+		{
+			// Send an empty redirected object.
+			let r = ctx
+				.client
+				.put_object()
+				.bucket(&bucket)
+				.key(FURTHER_REDIRECT_KEY)
+				.website_redirect_location(REDIRECT_KEY)
+				.send()
+				.await
+				.unwrap();
+
+			// A redirected object remains an object in the end.
+			assert_eq!(r.e_tag.unwrap().as_str(), empty_etag);
+			// We return a version ID here
+			// We should check if Amazon is returning one when versioning is not enabled
+			assert!(r.version_id.is_some());
+
+
+			let o = ctx
+				.client
+				.get_object()
+				.bucket(&bucket)
+				.key(FURTHER_REDIRECT_KEY)
+				.send()
+				.await
+				.unwrap();
+
+			assert_bytes_eq!(o.body, b"hi");
+			assert_eq!(o.e_tag.unwrap(), etag);
+			// We do not return version ID
+			// We should check if Amazon is returning one when versioning is not enabled
+			// assert_eq!(o.version_id.unwrap(), _version);
+			assert_eq!(o.content_type.unwrap(), content_type);
+			assert!(o.last_modified.is_some());
+			assert_eq!(o.content_length.unwrap(), 2);
+			assert_eq!(o.parts_count, None);
+			assert_eq!(o.tag_count, None);
+		}
+	}
 }
