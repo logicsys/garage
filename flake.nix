@@ -10,7 +10,8 @@
 
   inputs.cargo2nix = {
     # As of 2022-10-18: two small patches over unstable branch, one for clippy and one to fix feature detection
-    url = "github:Alexis211/cargo2nix/a7a61179b66054904ef6a195d8da736eaaa06c36";
+    # with non deprecated URL literals.
+    url = "github:Alexis211/cargo2nix/0f857db8af0f9e2d9223b1605e5318c1cf8b7235";
 
     # As of 2023-04-25:
     # - my two patches were merged into unstable (one for clippy and one to "fix" feature detection)
