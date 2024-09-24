@@ -201,30 +201,36 @@ pub struct AdminConfig {
 	pub trace_sink: Option<String>,
 }
 
-/// Configuration to apply automatically
+/// Configuration to apply without manual intervention
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct AutoConfig {
+	/// Buckets to create automatically
     pub buckets: Vec<AutoBucket>,
     
-    /// Keys to automatically create on startup
+    /// Keys to create automatically
     pub keys: Vec<AutoKey>,
 
-	/// Node layout to automatically configure.
+	/// Node layout to create automatically
 	pub nodes: Vec<AutoNode>,
 }
 
 /// Key to create automatically
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct AutoKey {
+	/// Key name
     pub name: String,
+	/// Key ID starting with GK
     pub id: String,
+	/// Secret key
     pub secret: String,
 }
 
 /// Bucket to create automatically
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct AutoBucket {
+	/// Bucket name
     pub name: String,
+	/// Permissions to grant on bucket to given keys
     pub allow: Vec<AutoPermission>,
 }
 
