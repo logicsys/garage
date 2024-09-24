@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use format_table::format_table;
+use garage_util::config::{AutoBucket, AutoConfig, AutoKey, AutoPermission, Config};
 use garage_util::error::*;
 
 use garage_rpc::layout::*;
@@ -18,6 +19,7 @@ pub async fn cli_command_dispatch(
 	system_rpc_endpoint: &Endpoint<SystemRpc, ()>,
 	admin_rpc_endpoint: &Endpoint<AdminRpc, ()>,
 	rpc_host: NodeID,
+    config: &Config,
 ) -> Result<(), HelperError> {
 	match cmd {
 		Command::Status => Ok(cmd_status(system_rpc_endpoint, rpc_host).await?),
@@ -44,6 +46,9 @@ pub async fn cli_command_dispatch(
 		Command::Meta(mo) => {
 			cmd_admin(admin_rpc_endpoint, rpc_host, AdminRpc::MetaOperation(mo)).await
 		}
+        Command::Auto => {
+            cmd_auto(admin_rpc_endpoint, rpc_host, config.auto.as_ref()).await
+        }
 		_ => unreachable!(),
 	}
 }
@@ -264,6 +269,42 @@ pub async fn cmd_admin(
 	Ok(())
 }
 
+pub async fn cmd_auto(
+    rpc_cli: &Endpoint<AdminRpc, ()>,
+	rpc_host: NodeID,
+    config: Option<&AutoConfig>,
+) -> Result<(), HelperError> {
+    match config {
+        Some(auto) => {
+
+			// Import keys
+            for key in auto.keys.iter() {
+                let exists = key_exists(rpc_cli, rpc_host, key.id.clone()).await?;
+                if !exists {
+                    key_create(rpc_cli, rpc_host, key).await?;
+                }
+            }
+
+			// Import buckets
+			for bucket in auto.buckets.iter() {
+				let exists = bucket_exists(rpc_cli, rpc_host, bucket.name.clone()).await?;
+				if !exists {
+					bucket_create(rpc_cli, rpc_host, bucket).await?;
+				}
+
+				// Assign permissions to keys.
+				for perm in bucket.allow.iter() {
+					grant_permission(rpc_cli, rpc_host, bucket.name.clone(), perm).await?;
+				}
+			}
+        }
+        _ => {
+            println!("Auto configuration is missing");
+        }
+    }
+    Ok(())
+}
+
 // ---- utility ----
 
 pub async fn fetch_status(
@@ -276,5 +317,103 @@ pub async fn fetch_status(
 	{
 		SystemRpc::ReturnKnownNodes(nodes) => Ok(nodes),
 		resp => Err(Error::unexpected_rpc_message(resp)),
+	}
+}
+
+pub async fn key_exists(
+    rpc_cli: &Endpoint<AdminRpc, ()>,
+	rpc_host: NodeID,
+    key_pattern: String,
+) -> Result<bool, Error> {
+    match rpc_cli
+        .call(&rpc_host, AdminRpc::KeyOperation(
+            KeyOperation::Info(KeyInfoOpt{
+                key_pattern,
+                show_secret: false,
+            })), PRIO_NORMAL)
+        .await?
+    {
+        Ok(_) => Ok(true),
+        Err(HelperError::BadRequest(_)) => Ok(false),
+        resp => Err(Error::unexpected_rpc_message(resp)),
+    }
+}
+
+pub async fn bucket_exists(
+	rpc_cli: &Endpoint<AdminRpc, ()>,
+	rpc_host: NodeID,
+	name: String,
+) -> Result<bool, Error> {
+	match rpc_cli
+		.call(&rpc_host, AdminRpc::BucketOperation(
+			BucketOperation::Info(BucketOpt{name})
+		), PRIO_NORMAL)
+		.await?
+	{
+		Ok(_) => Ok(true),
+		Err(HelperError::BadRequest(_)) => Ok(false),
+		resp => Err(Error::unexpected_rpc_message(resp)),
+	}
+}
+
+pub async fn key_create(
+    rpc_cli: &Endpoint<AdminRpc, ()>,
+	rpc_host: NodeID,
+    params: &AutoKey,
+) -> Result<(), Error> {
+    match rpc_cli
+        .call(&rpc_host, AdminRpc::KeyOperation(
+			KeyOperation::Import(KeyImportOpt{
+				name: params.name.clone(),
+				secret_key: params.secret.clone(),
+				key_id: params.id.clone(),
+				yes: true,
+			})
+        ), PRIO_NORMAL).await?
+    {
+		Ok(_) => Ok(()),
+		Err(HelperError::BadRequest(msg)) => Err(Error::Message(msg)),
+        resp => Err(Error::unexpected_rpc_message(resp))
+    }
+}
+
+pub async fn bucket_create(
+	rpc_cli: &Endpoint<AdminRpc, ()>,
+	rpc_host: NodeID,
+	params: &AutoBucket,
+) -> Result<(), Error> {
+	match rpc_cli
+		.call(&rpc_host, AdminRpc::BucketOperation(
+			BucketOperation::Create(BucketOpt{name: params.name.clone()})
+		), PRIO_NORMAL)
+		.await?
+	{
+		Ok(_) => Ok(()),
+		Err(HelperError::BadRequest(msg)) => Err(Error::Message(msg)),
+		resp => Err(Error::unexpected_rpc_message(resp))
+	}
+}
+
+pub async fn grant_permission(
+	rpc_cli: &Endpoint<AdminRpc, ()>,
+	rpc_host: NodeID,
+	bucket_name: String,
+	perm: &AutoPermission,
+) -> Result<(), Error> {
+	match rpc_cli
+		.call(&rpc_host, AdminRpc::BucketOperation(
+			BucketOperation::Allow(PermBucketOpt{
+				key_pattern: perm.key.clone(),
+				read: perm.read,
+				write: perm.write,
+				owner: perm.owner,
+				bucket: bucket_name,
+			})
+		), PRIO_NORMAL)
+		.await?
+	{
+		Ok(_) => Ok(()),
+		Err(HelperError::BadRequest(msg)) => Err(Error::Message(msg)),
+		resp => Err(Error::unexpected_rpc_message(resp))
 	}
 }

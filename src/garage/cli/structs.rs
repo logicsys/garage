@@ -59,6 +59,9 @@ pub enum Command {
 	/// Convert metadata db between database engine formats
 	#[structopt(name = "convert-db", version = garage_version())]
 	ConvertDb(convert_db::ConvertDbOpt),
+
+    /// Create preconfigured keys, buckets and node layout.
+    Auto,
 }
 
 #[derive(StructOpt, Debug)]

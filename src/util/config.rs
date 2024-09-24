@@ -128,6 +128,9 @@ pub struct Config {
 	/// Configuration for the admin API endpoint
 	#[serde(default = "Default::default")]
 	pub admin: AdminConfig,
+
+    /// Configuration to apply automatically
+    pub auto: Option<AutoConfig>,
 }
 
 /// Value for data_dir: either a single directory or a list of dirs with attributes
@@ -196,6 +199,46 @@ pub struct AdminConfig {
 
 	/// OTLP server to where to export traces
 	pub trace_sink: Option<String>,
+}
+
+/// Configuration to apply automatically
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct AutoConfig {
+    pub buckets: Vec<AutoBucket>,
+    
+    /// Keys to automatically create on startup
+    pub keys: Vec<AutoKey>,
+}
+
+/// Key to create automatically
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct AutoKey {
+    pub name: String,
+    pub id: String,
+    pub secret: String,
+}
+
+/// Bucket to create automatically
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct AutoBucket {
+    pub name: String,
+    pub allow: Vec<AutoPermission>,
+}
+
+/// Permission to create automatically
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct AutoPermission {
+    /// Key ID or name
+    pub key: String,
+
+	/// Grant read permission
+	pub read: bool,
+
+	/// Grant write permission
+	pub write: bool,
+
+	/// Grant owner permission
+	pub owner: bool,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
