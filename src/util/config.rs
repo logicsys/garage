@@ -129,8 +129,8 @@ pub struct Config {
 	#[serde(default = "Default::default")]
 	pub admin: AdminConfig,
 
-    /// Configuration to apply automatically
-    pub auto: Option<AutoConfig>,
+	/// Configuration to apply automatically
+	pub auto: Option<AutoConfig>,
 }
 
 /// Value for data_dir: either a single directory or a list of dirs with attributes
@@ -205,10 +205,10 @@ pub struct AdminConfig {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct AutoConfig {
 	/// Buckets to create automatically
-    pub buckets: Vec<AutoBucket>,
-    
-    /// Keys to create automatically
-    pub keys: Vec<AutoKey>,
+	pub buckets: Vec<AutoBucket>,
+
+	/// Keys to create automatically
+	pub keys: Vec<AutoKey>,
 
 	/// Node layout to create automatically
 	pub nodes: Vec<AutoNode>,
@@ -218,27 +218,27 @@ pub struct AutoConfig {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct AutoKey {
 	/// Key name
-    pub name: String,
+	pub name: String,
 	/// Key ID starting with GK
-    pub id: String,
+	pub id: String,
 	/// Secret key
-    pub secret: String,
+	pub secret: String,
 }
 
 /// Bucket to create automatically
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct AutoBucket {
 	/// Bucket name
-    pub name: String,
+	pub name: String,
 	/// Permissions to grant on bucket to given keys
-    pub allow: Vec<AutoPermission>,
+	pub allow: Vec<AutoPermission>,
 }
 
 /// Permission to create automatically
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct AutoPermission {
-    /// Key ID or name
-    pub key: String,
+	/// Key ID or name
+	pub key: String,
 
 	/// Grant read permission
 	pub read: bool,

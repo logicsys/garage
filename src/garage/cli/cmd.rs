@@ -19,7 +19,7 @@ pub async fn cli_command_dispatch(
 	system_rpc_endpoint: &Endpoint<SystemRpc, ()>,
 	admin_rpc_endpoint: &Endpoint<AdminRpc, ()>,
 	rpc_host: NodeID,
-    config: &Config,
+	config: &Config,
 ) -> Result<(), HelperError> {
 	match cmd {
 		Command::Status => Ok(cmd_status(system_rpc_endpoint, rpc_host).await?),
@@ -46,9 +46,15 @@ pub async fn cli_command_dispatch(
 		Command::Meta(mo) => {
 			cmd_admin(admin_rpc_endpoint, rpc_host, AdminRpc::MetaOperation(mo)).await
 		}
-        Command::Auto => {
-            cmd_auto(admin_rpc_endpoint, system_rpc_endpoint, rpc_host, config.auto.as_ref()).await
-        }
+		Command::Auto => {
+			cmd_auto(
+				admin_rpc_endpoint,
+				system_rpc_endpoint,
+				rpc_host,
+				config.auto.as_ref(),
+			)
+			.await
+		}
 		_ => unreachable!(),
 	}
 }
@@ -275,9 +281,8 @@ pub async fn cmd_auto(
 	rpc_host: NodeID,
 	config: Option<&AutoConfig>,
 ) -> Result<(), HelperError> {
-    match config {
-        Some(auto) => {
-
+	match config {
+		Some(auto) => {
 			// Assign cluster layout if all nodes are unassigned.
 			// This is to ensure a newly created cluster is readily available.
 			// Further changes to the cluster layout must be done manually.
@@ -286,12 +291,12 @@ pub async fn cmd_auto(
 			}
 
 			// Import keys
-            for key in auto.keys.iter() {
-                let exists = key_exists(rpc_admin, rpc_host, key.id.clone()).await?;
-                if !exists {
-                    key_create(rpc_admin, rpc_host, key).await?;
-                }
-            }
+			for key in auto.keys.iter() {
+				let exists = key_exists(rpc_admin, rpc_host, key.id.clone()).await?;
+				if !exists {
+					key_create(rpc_admin, rpc_host, key).await?;
+				}
+			}
 
 			// Import buckets
 			for bucket in auto.buckets.iter() {
@@ -305,12 +310,14 @@ pub async fn cmd_auto(
 					grant_permission(rpc_admin, rpc_host, bucket.name.clone(), perm).await?;
 				}
 			}
-        }
-        _ => {
-			return Err(HelperError::BadRequest("Auto configuration is missing".to_string()))
-        }
-    }
-    Ok(())
+		}
+		_ => {
+			return Err(HelperError::BadRequest(
+				"Auto configuration is missing".to_string(),
+			))
+		}
+	}
+	Ok(())
 }
 
 // ---- utility ----

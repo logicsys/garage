@@ -60,8 +60,8 @@ pub enum Command {
 	#[structopt(name = "convert-db", version = garage_version())]
 	ConvertDb(convert_db::ConvertDbOpt),
 
-    /// Create preconfigured keys, buckets and node layout.
-    Auto,
+	/// Create preconfigured keys, buckets and node layout.
+	Auto,
 }
 
 #[derive(StructOpt, Debug)]
