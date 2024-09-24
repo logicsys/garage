@@ -208,6 +208,9 @@ pub struct AutoConfig {
     
     /// Keys to automatically create on startup
     pub keys: Vec<AutoKey>,
+
+	/// Node layout to automatically configure.
+	pub nodes: Vec<AutoNode>,
 }
 
 /// Key to create automatically
@@ -239,6 +242,15 @@ pub struct AutoPermission {
 
 	/// Grant owner permission
 	pub owner: bool,
+}
+
+/// Node layout to create automatically
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct AutoNode {
+	/// Zone name
+	pub zone: String,
+	/// Storage capacity, in bytes (or with suffix)
+	pub capacity: String,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
