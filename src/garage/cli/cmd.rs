@@ -309,6 +309,11 @@ pub async fn cmd_auto(
 				for perm in bucket.allow.iter() {
 					grant_permission(rpc_admin, rpc_host, bucket.name.clone(), perm).await?;
 				}
+
+				// Configure website access.
+				if let Some(website) = bucket.website.as_ref() {
+					bucket_configure_website(rpc_admin, rpc_host, bucket.name.clone(), website).await?
+				}
 			}
 		}
 		_ => {

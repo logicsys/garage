@@ -1,8 +1,5 @@
 use crate::admin::AdminRpc;
-use crate::cli::{
-	cmd_apply_layout, cmd_assign_role, fetch_layout, fetch_status, ApplyLayoutOpt, AssignRoleOpt,
-	BucketOperation, BucketOpt, KeyImportOpt, KeyInfoOpt, KeyOperation, PermBucketOpt,
-};
+use crate::cli::{cmd_apply_layout, cmd_assign_role, fetch_layout, fetch_status, ApplyLayoutOpt, AssignRoleOpt, BucketOperation, BucketOpt, KeyImportOpt, KeyInfoOpt, KeyOperation, PermBucketOpt, WebsiteOpt};
 use bytesize::ByteSize;
 use garage_model::helper::error::Error as HelperError;
 use garage_net::endpoint::Endpoint;
@@ -10,7 +7,7 @@ use garage_net::message::PRIO_NORMAL;
 use garage_net::NodeID;
 use garage_rpc::layout::NodeRoleV;
 use garage_rpc::system::SystemRpc;
-use garage_util::config::{AutoBucket, AutoKey, AutoNode, AutoPermission};
+use garage_util::config::{AutoBucket, AutoBucketWebsite, AutoKey, AutoNode, AutoPermission, WebsiteAllowance};
 use garage_util::data::Uuid;
 use garage_util::error::Error;
 
@@ -89,6 +86,32 @@ pub async fn bucket_create(
 			&rpc_host,
 			AdminRpc::BucketOperation(BucketOperation::Create(BucketOpt {
 				name: params.name.clone(),
+			})),
+			PRIO_NORMAL,
+		)
+		.await?
+	{
+		Ok(_) => Ok(()),
+		Err(HelperError::BadRequest(msg)) => Err(Error::Message(msg)),
+		resp => Err(Error::unexpected_rpc_message(resp)),
+	}
+}
+
+pub async fn bucket_configure_website(
+	rpc_cli: &Endpoint<AdminRpc, ()>,
+	rpc_host: NodeID,
+	bucket_name: String,
+	website: &AutoBucketWebsite,
+) -> Result<(), Error> {
+	match rpc_cli
+		.call(
+			&rpc_host,
+			AdminRpc::BucketOperation(BucketOperation::Website(WebsiteOpt{
+				allow: matches!(website.mode, WebsiteAllowance::Allow),
+				deny: matches!(website.mode, WebsiteAllowance::Deny),
+				bucket: bucket_name.clone(),
+				index_document: website.index_document.clone(),
+				error_document: website.error_document.clone(),
 			})),
 			PRIO_NORMAL,
 		)

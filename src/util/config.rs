@@ -232,6 +232,33 @@ pub struct AutoBucket {
 	pub name: String,
 	/// Permissions to grant on bucket to given keys
 	pub allow: Vec<AutoPermission>,
+	/// Website configuration
+	pub website: Option<AutoBucketWebsite>
+}
+
+fn default_index_document() -> String {
+	"index.html".to_string()
+}
+
+/// Bucket website configuration to create automatically
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct AutoBucketWebsite {
+	/// Allow or deny (default) website access
+	#[serde(default)]
+	pub mode: WebsiteAllowance,
+	/// Error document: the optional document returned when an error occurs
+	pub error_document: Option<String>,
+	/// Index document: the suffix appended to request paths ending by /
+	#[serde(default = "default_index_document")]
+	pub index_document: String,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum WebsiteAllowance {
+	Allow,
+	#[default]
+	Deny,
 }
 
 /// Permission to create automatically
