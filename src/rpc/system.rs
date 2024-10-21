@@ -817,22 +817,58 @@ impl NodeStatus {
 		}
 	}
 
+	#[cfg(windows)]
 	fn update_disk_usage(&mut self, meta_dir: &Path, data_dir: &DataDirEnum) {
-		#[cfg(unix)]
-		let mount_avail = {
-			use nix::sys::statvfs::statvfs;
-			|path: &Path| match statvfs(path) {
-				Ok(x) => {
-					let avail = x.blocks_available() as u64 * x.fragment_size() as u64;
-					let total = x.blocks() as u64 * x.fragment_size() as u64;
-					Some((x.filesystem_id(), avail, total))
-				}
-				Err(_) => None,
+		use winapi::um::fileapi::GetDiskFreeSpaceExA;
+		use winapi::um::winnt::ULARGE_INTEGER;
+
+		let mount_avail = |path: &Path| -> Option<(u64, u64)> {
+			let mut path = path.to_path_buf();
+			path.push(""); // Ensure trailing slash
+
+			let mut a: ULARGE_INTEGER = Default::default();
+			let mut total: ULARGE_INTEGER = Default::default();
+			let mut free: ULARGE_INTEGER = Default::default();
+
+			let path_ptr = path.as_os_str().as_encoded_bytes().as_ptr();
+			let result = unsafe {
+				GetDiskFreeSpaceExA(path_ptr as *const i8, &mut a, &mut total, &mut free)
+			};
+
+			if result == 0 {
+				return None;
 			}
+
+			let free = unsafe { *free.QuadPart() };
+			let total = unsafe { *total.QuadPart() };
+
+			Some((free, total))
 		};
 
-		#[cfg(windows)]
-		let mount_avail = |_path: &Path| None::<(u64, _, _)>;
+		self.meta_disk_avail = mount_avail(meta_dir);
+		self.data_disk_avail = match data_dir {
+			DataDirEnum::Single(path_buf) => mount_avail(path_buf),
+
+			// TODO: THIS IS WRONG!! Does not take into account multiple dirs on the same partition
+			// Will have to deduplicate by the filesystem mount path
+			DataDirEnum::Multiple(dirs) => dirs
+				.into_iter()
+				.filter_map(|dir| mount_avail(&dir.path))
+				.reduce(|(a1, b1), (a2, b2)| (a1 + a2, b1 + b2)),
+		};
+	}
+
+	#[cfg(unix)]
+	fn update_disk_usage(&mut self, meta_dir: &Path, data_dir: &DataDirEnum) {
+		use nix::sys::statvfs::statvfs;
+		let mount_avail = |path: &Path| match statvfs(path) {
+			Ok(x) => {
+				let avail = x.blocks_available() as u64 * x.fragment_size() as u64;
+				let total = x.blocks() as u64 * x.fragment_size() as u64;
+				Some((x.filesystem_id(), avail, total))
+			}
+			Err(_) => None,
+		};
 
 		self.meta_disk_avail = mount_avail(meta_dir).map(|(_, a, t)| (a, t));
 		self.data_disk_avail = match data_dir {

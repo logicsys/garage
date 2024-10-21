@@ -51,7 +51,10 @@ tokio.workspace = true
 tokio-stream.workspace = true
 opentelemetry.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3.9", features = ["fileapi", "impl-default"] }
+
 [features]
-kubernetes-discovery = [ "kube", "k8s-openapi", "schemars" ]
-consul-discovery = [ "reqwest", "err-derive" ]
-system-libs = [ "sodiumoxide/use-pkg-config" ]
+kubernetes-discovery = ["kube", "k8s-openapi", "schemars"]
+consul-discovery = ["reqwest", "err-derive"]
+system-libs = ["sodiumoxide/use-pkg-config"]
