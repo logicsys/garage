@@ -18,7 +18,6 @@ use hyper_util::rt::TokioIo;
 
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
-// , UnixListener, UnixStream};
 use tokio::sync::watch;
 use tokio::time::{sleep_until, Instant};
 
@@ -35,6 +34,9 @@ use garage_util::metrics::{gen_trace_id, RecordDuration};
 use garage_util::socket_address::UnixOrTCPSocketAddress;
 
 use crate::helpers::{BoxBody, ErrorBody};
+
+#[cfg(unix)]
+use tokio::net::{UnixListener, UnixStream};
 
 pub(crate) trait ApiEndpoint: Send + Sync + 'static {
 	fn name(&self) -> &'static str;
@@ -121,6 +123,7 @@ impl<A: ApiHandler> ApiServer<A> {
 			}
 			#[cfg(unix)]
 			UnixOrTCPSocketAddress::UnixSocket(ref path) => {
+				use std::os::unix::fs::PermissionsExt;
 				if path.exists() {
 					fs::remove_file(path)?
 				}

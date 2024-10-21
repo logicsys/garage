@@ -2,8 +2,10 @@ use std::fs::{self, Permissions};
 use std::{convert::Infallible, sync::Arc};
 
 use tokio::net::TcpListener;
-// /, UnixListener};
 use tokio::sync::watch;
+
+#[cfg(unix)]
+use tokio::net::UnixListener;
 
 use hyper::{
 	body::Incoming as IncomingBody,
@@ -98,6 +100,9 @@ impl WebServer {
 			}
 			#[cfg(unix)]
 			UnixOrTCPSocketAddress::UnixSocket(ref path) => {
+				use garage_api::generic_server::UnixListenerOn;
+				use std::os::unix::fs::PermissionsExt;
+
 				if path.exists() {
 					fs::remove_file(path)?
 				}
