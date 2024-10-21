@@ -52,9 +52,13 @@ pub struct Secrets {
 /// from config or CLI param or env variable or read from a file specified in config or CLI
 /// param or env variable)
 pub fn fill_secrets(mut config: Config, secrets: Secrets) -> Result<Config, Error> {
+	#[cfg(unix)]
 	let allow_world_readable = secrets
 		.allow_world_readable_secrets
 		.unwrap_or(config.allow_world_readable_secrets);
+
+	#[cfg(not(unix))]
+	let allow_world_readable = config.allow_world_readable_secrets;
 
 	fill_secret(
 		&mut config.rpc_secret,

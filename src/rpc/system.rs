@@ -218,11 +218,23 @@ pub fn gen_node_key(metadata_dir: &Path) -> Result<NodeKey, Error> {
 		info!("Generating new node key pair.");
 		let (pubkey, key) = ed25519::gen_keypair();
 
+		#[cfg(unix)]
 		{
 			use std::os::unix::fs::PermissionsExt;
 			let mut f = std::fs::File::create(key_file.as_path())?;
 			let mut perm = f.metadata()?.permissions();
 			perm.set_mode(0o600);
+			std::fs::set_permissions(key_file.as_path(), perm)?;
+			f.write_all(&key[..])?;
+		}
+
+		#[cfg(windows)]
+		{
+			// use std::os::windows::io::AsHandle;
+			let mut f = std::fs::File::create(key_file.as_path())?;
+			// TODO: Set ACL here?
+			let mut perm = f.metadata()?.permissions();
+			perm.set_readonly(true);
 			std::fs::set_permissions(key_file.as_path(), perm)?;
 			f.write_all(&key[..])?;
 		}
@@ -806,15 +818,21 @@ impl NodeStatus {
 	}
 
 	fn update_disk_usage(&mut self, meta_dir: &Path, data_dir: &DataDirEnum) {
-		use nix::sys::statvfs::statvfs;
-		let mount_avail = |path: &Path| match statvfs(path) {
-			Ok(x) => {
-				let avail = x.blocks_available() as u64 * x.fragment_size() as u64;
-				let total = x.blocks() as u64 * x.fragment_size() as u64;
-				Some((x.filesystem_id(), avail, total))
+		#[cfg(unix)]
+		let mount_avail = {
+			use nix::sys::statvfs::statvfs;
+			|path: &Path| match statvfs(path) {
+				Ok(x) => {
+					let avail = x.blocks_available() as u64 * x.fragment_size() as u64;
+					let total = x.blocks() as u64 * x.fragment_size() as u64;
+					Some((x.filesystem_id(), avail, total))
+				}
+				Err(_) => None,
 			}
-			Err(_) => None,
 		};
+
+		#[cfg(windows)]
+		let mount_avail = |_path: &Path| None::<(u64, _, _)>;
 
 		self.meta_disk_avail = mount_avail(meta_dir).map(|(_, a, t)| (a, t));
 		self.data_disk_avail = match data_dir {
