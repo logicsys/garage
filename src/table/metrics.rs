@@ -6,8 +6,6 @@ use garage_db as db;
 pub struct TableMetrics {
 	pub(crate) _table_size: ValueObserver<u64>,
 	pub(crate) _merkle_tree_size: ValueObserver<u64>,
-	pub(crate) _merkle_todo_len: ValueObserver<u64>,
-	pub(crate) _gc_todo_len: ValueObserver<u64>,
 
 	pub(crate) get_request_counter: BoundCounter<u64>,
 	pub(crate) get_request_duration: BoundValueRecorder<f64>,
@@ -25,8 +23,6 @@ impl TableMetrics {
 		table_name: &'static str,
 		store: db::Tree,
 		merkle_tree: db::Tree,
-		merkle_todo: db::Tree,
-		gc_todo: db::Tree,
 	) -> Self {
 		let meter = global::meter(table_name);
 		TableMetrics {
@@ -57,34 +53,6 @@ impl TableMetrics {
 					},
 				)
 				.with_description("Number of nodes in table's Merkle tree")
-				.init(),
-			_merkle_todo_len: meter
-				.u64_value_observer(
-					"table.merkle_updater_todo_queue_length",
-					move |observer| {
-						if let Ok(v) = merkle_todo.len() {
-							observer.observe(
-								v as u64,
-								&[KeyValue::new("table_name", table_name)],
-							);
-						}
-					},
-				)
-				.with_description("Merkle tree updater TODO queue length")
-				.init(),
-			_gc_todo_len: meter
-				.u64_value_observer(
-					"table.gc_todo_queue_length",
-					move |observer| {
-                        if let Ok(value) = gc_todo.len() {
-                            observer.observe(
-                                value as u64,
-                                &[KeyValue::new("table_name", table_name)],
-                            );
-                        }
-					},
-				)
-				.with_description("Table garbage collector TODO queue length")
 				.init(),
 
 			get_request_counter: meter

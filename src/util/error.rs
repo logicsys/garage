@@ -30,6 +30,9 @@ pub enum Error {
 	#[error(display = "DB error: {}", _0)]
 	Db(#[error(source)] garage_db::Error),
 
+	#[error(display = "Todo error: {}", _0)]
+	Todo(#[error(source)] garage_todo::Error),
+
 	#[error(display = "Messagepack encode error: {}", _0)]
 	RmpEncode(#[error(source)] rmp_serde::encode::Error),
 	#[error(display = "Messagepack decode error: {}", _0)]

@@ -111,6 +111,11 @@ pub struct Config {
 	#[serde(default = "default_db_engine")]
 	pub db_engine: String,
 
+	// -- TODO
+	/// queue engine to use for metadata (options: yaque)
+	#[serde(default = "default_todo_engine")]
+	pub todo_engine: String,
+
 	/// LMDB map size
 	#[serde(deserialize_with = "deserialize_capacity", default)]
 	pub lmdb_map_size: usize,
@@ -254,6 +259,10 @@ pub fn read_config(config_file: PathBuf) -> Result<Config, Error> {
 
 fn default_db_engine() -> String {
 	"lmdb".into()
+}
+
+fn default_todo_engine() -> String {
+	"yaque".into()
 }
 
 fn default_block_size() -> usize {

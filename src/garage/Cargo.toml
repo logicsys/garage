@@ -23,6 +23,7 @@ path = "tests/lib.rs"
 [dependencies]
 format_table.workspace = true
 garage_db.workspace = true
+garage_todo.workspace = true
 garage_api.workspace = true
 garage_block.workspace = true
 garage_model.workspace = true
@@ -82,13 +83,14 @@ k2v-client.workspace = true
 
 
 [features]
-default = [ "bundled-libs", "metrics", "lmdb", "sqlite", "k2v" ]
+default = [ "bundled-libs", "metrics", "lmdb", "sqlite", "k2v", "yaque" ]
 
 k2v = [ "garage_util/k2v", "garage_api/k2v" ]
 
 # Database engines
 lmdb = [ "garage_model/lmdb" ]
 sqlite = [ "garage_model/sqlite" ]
+yaque = [ "garage_todo/yaque" ]
 
 # Automatic registration and discovery via Consul API
 consul-discovery = [ "garage_rpc/consul-discovery" ]

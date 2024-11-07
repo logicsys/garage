@@ -10,7 +10,7 @@ use serde_bytes::ByteBuf;
 use futures::future::join_all;
 use tokio::sync::watch;
 
-use garage_db as db;
+use garage_todo as todo;
 
 use garage_util::background::*;
 use garage_util::data::*;
@@ -76,8 +76,9 @@ impl<F: TableSchema, R: TableReplication> TableGc<F, R> {
 		// These entries are put there when a tombstone is inserted in the table
 		// (see update_entry in data.rs)
 		let mut candidates = vec![];
-		for entry_kv in self.data.gc_todo.iter()? {
-			let (k, vhash) = entry_kv?;
+
+        while let Some(entry_kv) = self.data.gc_todo.reserve()? {
+			let (k, vhash) = entry_kv;
 			let todo_entry = GcTodoEntry::parse(&k, &vhash);
 
 			if todo_entry.deletion_time() > now {
@@ -123,13 +124,6 @@ impl<F: TableSchema, R: TableReplication> TableGc<F, R> {
 			}
 		}
 
-		// Remove from gc_todo entries for tombstones where we have
-		// detected that the current value has changed and
-		// is no longer a tombstone.
-		for entry in excluded {
-			entry.remove_if_equal(&self.data.gc_todo)?;
-		}
-
 		// Remaining in `entries` is the list of entries we want to GC,
 		// and for which they are still currently tombstones in the table.
 
@@ -168,16 +162,22 @@ impl<F: TableSchema, R: TableReplication> TableGc<F, R> {
 		let resps = join_all(
 			partitions
 				.into_iter()
-				.map(|(nodes, items)| self.try_send_and_delete(nodes, items)),
+				.map(|(nodes, items)| async {
+                    let r = self.try_send_and_delete(nodes, &items).await;
+                    (items, r)
+                }),
 		)
 		.await;
 
 		// Collect errors and return a single error value even if several
-		// errors occurred.
+		// errors occurred. Push failed items back into the GC queue.
 		let mut errs = vec![];
-		for resp in resps {
+		for (items, resp) in resps {
 			if let Err(e) = resp {
 				errs.push(e);
+                for item in items {
+                    item.save(&self.data.gc_todo)?;
+                }
 			}
 		}
 
@@ -197,7 +197,7 @@ impl<F: TableSchema, R: TableReplication> TableGc<F, R> {
 	async fn try_send_and_delete(
 		&self,
 		nodes: Vec<Uuid>,
-		mut items: Vec<GcTodoEntry>,
+		items: &Vec<GcTodoEntry>,
 	) -> Result<(), Error> {
 		let n_items = items.len();
 
@@ -216,8 +216,8 @@ impl<F: TableSchema, R: TableReplication> TableGc<F, R> {
 		// and in deletes the list of keys and hashes of value for step 2.
 		let mut updates = vec![];
 		let mut deletes = vec![];
-		for item in items.iter_mut() {
-			updates.push(ByteBuf::from(item.value.take().unwrap()));
+		for item in items {
+			updates.push(ByteBuf::from(item.value.clone().unwrap()));
 			deletes.push((ByteBuf::from(item.key.clone()), item.value_hash));
 		}
 
@@ -264,8 +264,6 @@ impl<F: TableSchema, R: TableReplication> TableGc<F, R> {
 			self.data
 				.delete_if_equal_hash(&item.key[..], item.value_hash)
 				.err_context("GC: local delete tombstones")?;
-			item.remove_if_equal(&self.data.gc_todo)
-				.err_context("GC: remove from todo list after successfull GC")?;
 		}
 
 		Ok(())
@@ -313,7 +311,7 @@ impl<F: TableSchema, R: TableReplication> Worker for GcWorker<F, R> {
 
 	fn status(&self) -> WorkerStatus {
 		WorkerStatus {
-			queue_length: Some(self.gc.data.gc_todo_len().unwrap_or(0) as u64),
+			queue_length: Some(0 as u64),
 			..Default::default()
 		}
 	}
@@ -376,24 +374,8 @@ impl GcTodoEntry {
 	}
 
 	/// Saves the GcTodoEntry in the gc_todo tree
-	pub(crate) fn save(&self, gc_todo_tree: &db::Tree) -> Result<(), Error> {
-		gc_todo_tree.insert(self.todo_table_key(), self.value_hash.as_slice())?;
-		Ok(())
-	}
-
-	/// Removes the GcTodoEntry from the gc_todo tree if the
-	/// hash of the serialized value is the same here as in the tree.
-	/// This is usefull to remove a todo entry only under the condition
-	/// that it has not changed since the time it was read, i.e.
-	/// what we have to do is still the same
-	pub(crate) fn remove_if_equal(&self, gc_todo_tree: &db::Tree) -> Result<(), Error> {
-		gc_todo_tree.db().transaction(|txn| {
-			let key = self.todo_table_key();
-			if txn.get(gc_todo_tree, &key)?.as_deref() == Some(self.value_hash.as_slice()) {
-				txn.remove(gc_todo_tree, &key)?;
-			}
-			Ok(())
-		})?;
+	pub(crate) fn save(&self, gc_todo_tree: &todo::Queue) -> Result<(), Error> {
+		gc_todo_tree.submit(&self.todo_table_key(), self.value_hash.as_slice())?;
 		Ok(())
 	}
 

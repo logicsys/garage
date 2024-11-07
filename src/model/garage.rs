@@ -4,6 +4,7 @@ use std::sync::Arc;
 use garage_net::NetworkKey;
 
 use garage_db as db;
+use garage_todo as todo;
 
 use garage_util::background::*;
 use garage_util::config::*;
@@ -45,6 +46,8 @@ pub struct Garage {
 
 	/// The local database
 	pub db: db::Db,
+    /// The todo queues
+    pub todo: todo::Todo,
 	/// The membership manager
 	pub system: Arc<System>,
 	/// The block manager
@@ -135,6 +138,18 @@ impl Garage {
 		let db = db::open_db(&db_path, db_engine, &db_opt)
 			.ok_or_message("Unable to open metadata db")?;
 
+        info!("Initializing queues...");
+		let todo_engine = todo::Engine::from_str(&config.todo_engine)
+			.ok_or_message("Invalid `todo_engine` value in configuration file")?;
+        let mut todo_path = config.metadata_dir.clone();
+        match todo_engine {
+            todo::Engine::Yaque => {
+                todo_path.push("todo.yaque")
+            }
+        }
+        let todo = todo::open_todo(&todo_path, todo_engine)
+            .ok_or_message("Unable to start todo engine")?;
+
 		info!("Initializing RPC...");
 		let network_key = hex::decode(config.rpc_secret.as_ref().ok_or_message(
 			"rpc_secret value is missing, not present in config file or in environment",
@@ -175,7 +190,7 @@ impl Garage {
 
 		// ---- admin tables ----
 		info!("Initialize bucket_table...");
-		let bucket_table = Table::new(BucketTable, control_rep_param.clone(), system.clone(), &db);
+		let bucket_table = Table::new(BucketTable, control_rep_param.clone(), system.clone(), &db, &todo);
 
 		info!("Initialize bucket_alias_table...");
 		let bucket_alias_table = Table::new(
@@ -183,9 +198,10 @@ impl Garage {
 			control_rep_param.clone(),
 			system.clone(),
 			&db,
+            &todo,
 		);
 		info!("Initialize key_table_table...");
-		let key_table = Table::new(KeyTable, control_rep_param, system.clone(), &db);
+		let key_table = Table::new(KeyTable, control_rep_param, system.clone(), &db, &todo);
 
 		// ---- S3 tables ----
 		info!("Initialize block_ref_table...");
@@ -196,6 +212,7 @@ impl Garage {
 			meta_rep_param.clone(),
 			system.clone(),
 			&db,
+            &todo,
 		);
 
 		info!("Initialize version_table...");
@@ -206,10 +223,11 @@ impl Garage {
 			meta_rep_param.clone(),
 			system.clone(),
 			&db,
+            &todo,
 		);
 
 		info!("Initialize multipart upload counter table...");
-		let mpu_counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), &db);
+		let mpu_counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), &db, &todo);
 
 		info!("Initialize multipart upload table...");
 		let mpu_table = Table::new(
@@ -220,10 +238,11 @@ impl Garage {
 			meta_rep_param.clone(),
 			system.clone(),
 			&db,
+            &todo,
 		);
 
 		info!("Initialize object counter table...");
-		let object_counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), &db);
+		let object_counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), &db, &todo);
 
 		info!("Initialize object_table...");
 		#[allow(clippy::redundant_clone)]
@@ -236,6 +255,7 @@ impl Garage {
 			meta_rep_param.clone(),
 			system.clone(),
 			&db,
+            &todo,
 		);
 
 		info!("Load lifecycle worker state...");
@@ -245,7 +265,7 @@ impl Garage {
 
 		// ---- K2V ----
 		#[cfg(feature = "k2v")]
-		let k2v = GarageK2V::new(system.clone(), &db, meta_rep_param);
+		let k2v = GarageK2V::new(system.clone(), &db, &todo, meta_rep_param);
 
 		// ---- setup block refcount recalculation ----
 		// this function can be used to fix inconsistencies in the RC table
@@ -261,6 +281,7 @@ impl Garage {
 			bg_vars,
 			replication_factor,
 			db,
+            todo,
 			system,
 			block_manager,
 			bucket_table,
@@ -335,9 +356,9 @@ impl Garage {
 
 #[cfg(feature = "k2v")]
 impl GarageK2V {
-	fn new(system: Arc<System>, db: &db::Db, meta_rep_param: TableShardedReplication) -> Self {
+	fn new(system: Arc<System>, db: &db::Db, todo: &todo::Todo, meta_rep_param: TableShardedReplication) -> Self {
 		info!("Initialize K2V counter table...");
-		let counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), db);
+		let counter_table = IndexCounter::new(system.clone(), meta_rep_param.clone(), db, todo);
 
 		info!("Initialize K2V subscription manager...");
 		let subscriptions = Arc::new(SubscriptionManager::new());
@@ -351,6 +372,7 @@ impl GarageK2V {
 			meta_rep_param,
 			system.clone(),
 			db,
+            todo,
 		);
 
 		info!("Initialize K2V RPC handler...");

@@ -81,7 +81,7 @@ impl<F: TableSchema, R: TableReplication> MerkleUpdater<F, R> {
 	}
 
 	fn updater_loop_iter(&self) -> Result<WorkerState, Error> {
-		if let Some((key, valhash)) = self.data.merkle_todo.first()? {
+		if let Some((key, valhash)) = self.data.merkle_todo.reserve()? {
 			self.update_item(&key, &valhash)?;
 			Ok(WorkerState::Busy)
 		} else {
@@ -110,21 +110,6 @@ impl<F: TableSchema, R: TableReplication> MerkleUpdater<F, R> {
 			.db()
 			.transaction(|tx| self.update_item_rec(tx, k, &khash, &key, new_vhash))?;
 
-		let deleted = self.data.merkle_todo.db().transaction(|tx| {
-			let remove = matches!(tx.get(&self.data.merkle_todo, k)?, Some(ov) if ov == vhash_by);
-			if remove {
-				tx.remove(&self.data.merkle_todo, k)?;
-			}
-			Ok(remove)
-		})?;
-
-		if !deleted {
-			debug!(
-				"({}) Item not deleted from Merkle todo because it changed: {:?}",
-				F::TABLE_NAME,
-				k
-			);
-		}
 		Ok(())
 	}
 
@@ -290,10 +275,6 @@ impl<F: TableSchema, R: TableReplication> MerkleUpdater<F, R> {
 	pub fn merkle_tree_len(&self) -> Result<usize, Error> {
 		Ok(self.data.merkle_tree.len()?)
 	}
-
-	pub fn todo_len(&self) -> Result<usize, Error> {
-		Ok(self.data.merkle_todo.len()?)
-	}
 }
 
 struct MerkleWorker<F: TableSchema, R: TableReplication>(Arc<MerkleUpdater<F, R>>);
@@ -306,7 +287,6 @@ impl<F: TableSchema, R: TableReplication> Worker for MerkleWorker<F, R> {
 
 	fn status(&self) -> WorkerStatus {
 		WorkerStatus {
-			queue_length: Some(self.0.todo_len().unwrap_or(0) as u64),
 			..Default::default()
 		}
 	}

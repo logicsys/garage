@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
 	"src/db",
+	"src/todo",
 	"src/util",
 	"src/net",
 	"src/rpc",
@@ -24,6 +25,7 @@ format_table = { version = "0.1.1", path = "src/format-table" }
 garage_api = { version = "1.0.1", path = "src/api" }
 garage_block = { version = "1.0.1", path = "src/block" }
 garage_db = { version = "1.0.1", path = "src/db", default-features = false }
+garage_todo = { version = "1.0.1", path = "src/todo", default-features = false }
 garage_model = { version = "1.0.1", path = "src/model", default-features = false }
 garage_net = { version = "1.0.1", path = "src/net" }
 garage_rpc = { version = "1.0.1", path = "src/rpc" }
@@ -85,6 +87,8 @@ heed = { version = "0.11", default-features = false, features = ["lmdb"] }
 rusqlite = "0.31.0"
 r2d2 = "0.8"
 r2d2_sqlite = "0.24"
+
+yaque = "0.6"
 
 async-compression = { version = "0.4", features = ["tokio", "zstd"] }
 zstd = { version = "0.13", default-features = false }

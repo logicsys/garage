@@ -197,7 +197,7 @@ impl AdminRpcHandler {
 		writeln!(&mut ret, "\nDatabase engine: {}", self.garage.db.engine()).unwrap();
 
 		// Gather table statistics
-		let mut table = vec!["  Table\tItems\tMklItems\tMklTodo\tGcTodo".into()];
+		let mut table = vec!["  Table\tItems\tMklItems".into()];
 		table.push(self.gather_table_stats(&self.garage.bucket_table)?);
 		table.push(self.gather_table_stats(&self.garage.key_table)?);
 		table.push(self.gather_table_stats(&self.garage.object_table)?);
@@ -343,12 +343,10 @@ impl AdminRpcHandler {
 		let mkl_len = t.merkle_updater.merkle_tree_len()?.to_string();
 
 		Ok(format!(
-			"  {}\t{}\t{}\t{}\t{}",
+			"  {}\t{}\t{}",
 			F::TABLE_NAME,
 			data_len,
 			mkl_len,
-			t.merkle_updater.todo_len()?,
-			t.data.gc_todo_len()?
 		))
 	}
 

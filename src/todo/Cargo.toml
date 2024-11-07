@@ -1,0 +1,22 @@
+[package]
+name = "garage_todo"
+version = "1.0.1"
+authors = ["Julien Kritter <julien.kritter@withings.com>", "Alex Auvolat <alex@adnab.me>"]
+edition = "2018"
+license = "AGPL-3.0"
+description = "Abstraction over multiple queue implementations"
+repository = "https://git.deuxfleurs.fr/Deuxfleurs/garage"
+readme = "../../README.md"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+err-derive.workspace = true
+tracing.workspace = true
+
+yaque = { workspace = true, optional = true }
+
+[features]
+default = [ "yaque" ]
+yaque = [ "dep:yaque" ]

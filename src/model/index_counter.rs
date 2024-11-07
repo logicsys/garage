@@ -6,6 +6,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use garage_db as db;
+use garage_todo as todo;
 
 use garage_rpc::layout::LayoutHelper;
 use garage_rpc::system::System;
@@ -173,6 +174,7 @@ impl<T: CountedItem> IndexCounter<T> {
 		system: Arc<System>,
 		replication: TableShardedReplication,
 		db: &db::Db,
+        todo: &todo::Todo,
 	) -> Arc<Self> {
 		Arc::new(Self {
 			this_node: system.id,
@@ -186,6 +188,7 @@ impl<T: CountedItem> IndexCounter<T> {
 				replication,
 				system,
 				db,
+                todo,
 			),
 		})
 	}

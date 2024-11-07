@@ -6,6 +6,7 @@ use serde_bytes::ByteBuf;
 use tokio::sync::Notify;
 
 use garage_db as db;
+use garage_todo as todo;
 
 use garage_util::data::*;
 use garage_util::error::*;
@@ -29,19 +30,19 @@ pub struct TableData<F: TableSchema, R: TableReplication> {
 	pub store: db::Tree,
 
 	pub(crate) merkle_tree: db::Tree,
-	pub(crate) merkle_todo: db::Tree,
+	pub(crate) merkle_todo: todo::Queue,
 	pub(crate) merkle_todo_notify: Notify,
 
 	pub(crate) insert_queue: db::Tree,
 	pub(crate) insert_queue_notify: Arc<Notify>,
 
-	pub(crate) gc_todo: db::Tree,
+	pub(crate) gc_todo: todo::Queue,
 
 	pub(crate) metrics: TableMetrics,
 }
 
 impl<F: TableSchema, R: TableReplication> TableData<F, R> {
-	pub fn new(system: Arc<System>, instance: F, replication: R, db: &db::Db) -> Arc<Self> {
+	pub fn new(system: Arc<System>, instance: F, replication: R, db: &db::Db, todo: &todo::Todo) -> Arc<Self> {
 		let store = db
 			.open_tree(format!("{}:table", F::TABLE_NAME))
 			.expect("Unable to open DB tree");
@@ -49,24 +50,22 @@ impl<F: TableSchema, R: TableReplication> TableData<F, R> {
 		let merkle_tree = db
 			.open_tree(format!("{}:merkle_tree", F::TABLE_NAME))
 			.expect("Unable to open DB Merkle tree tree");
-		let merkle_todo = db
-			.open_tree(format!("{}:merkle_todo", F::TABLE_NAME))
-			.expect("Unable to open DB Merkle TODO tree");
+        let merkle_todo = todo
+            .open_queue(format!("{}:merkle_todo", F::TABLE_NAME))
+            .expect("Unable to open Merkle TODO queue");
 
 		let insert_queue = db
 			.open_tree(format!("{}:insert_queue", F::TABLE_NAME))
 			.expect("Unable to open insert queue DB tree");
 
-		let gc_todo = db
-			.open_tree(format!("{}:gc_todo_v2", F::TABLE_NAME))
-			.expect("Unable to open GC DB tree");
+		let gc_todo = todo
+			.open_queue(format!("{}:gc_todo_v2", F::TABLE_NAME))
+			.expect("Unable to open GC TODO queue");
 
 		let metrics = TableMetrics::new(
 			F::TABLE_NAME,
 			store.clone(),
 			merkle_tree.clone(),
-			merkle_todo.clone(),
-			gc_todo.clone(),
 		);
 
 		Arc::new(Self {
@@ -227,22 +226,22 @@ impl<F: TableSchema, R: TableReplication> TableData<F, R> {
 
 			if changed {
 				let new_bytes_hash = blake2sum(&new_bytes);
-				tx.insert(&self.merkle_todo, &tree_key, new_bytes_hash.as_slice())?;
 				tx.insert(&self.store, &tree_key, new_bytes)?;
 
 				self.instance
 					.updated(tx, old_entry.as_ref(), Some(&new_entry))?;
 
-				Ok(Some((new_entry, new_bytes_hash)))
+				Ok(Some((tree_key.clone(), new_entry, new_bytes_hash)))
 			} else {
 				Ok(None)
 			}
 		})?;
 
-		if let Some((new_entry, new_bytes_hash)) = changed {
+		if let Some((tree_key, new_entry, new_bytes_hash)) = changed {
 			self.metrics.internal_update_counter.add(1);
 
 			let is_tombstone = new_entry.is_tombstone();
+            self.merkle_todo.submit(&tree_key, new_bytes_hash.as_slice())?;
 			self.merkle_todo_notify.notify_one();
 			if is_tombstone {
 				// We are only responsible for GC'ing this item if we are the
@@ -272,21 +271,21 @@ impl<F: TableSchema, R: TableReplication> TableData<F, R> {
 			.transaction(|tx| match tx.get(&self.store, k)? {
 				Some(cur_v) if cur_v == v => {
 					let old_entry = self.decode_entry(v).map_err(db::TxError::Abort)?;
-
 					tx.remove(&self.store, k)?;
-					tx.insert(&self.merkle_todo, k, vec![])?;
-
 					self.instance.updated(tx, Some(&old_entry), None)?;
-					Ok(true)
+					Ok(Some(k))
 				}
-				_ => Ok(false),
+				_ => Ok(None),
 			})?;
 
-		if removed {
+		if let Some(k) = removed {
 			self.metrics.internal_delete_counter.add(1);
+            self.merkle_todo.submit(k, &[])?;
 			self.merkle_todo_notify.notify_one();
-		}
-		Ok(removed)
+            Ok(true)
+		} else {
+            Ok(false)
+        }
 	}
 
 	pub(crate) fn delete_if_equal_hash(
@@ -300,21 +299,21 @@ impl<F: TableSchema, R: TableReplication> TableData<F, R> {
 			.transaction(|tx| match tx.get(&self.store, k)? {
 				Some(cur_v) if blake2sum(&cur_v[..]) == vhash => {
 					let old_entry = self.decode_entry(&cur_v[..]).map_err(db::TxError::Abort)?;
-
 					tx.remove(&self.store, k)?;
-					tx.insert(&self.merkle_todo, k, vec![])?;
-
 					self.instance.updated(tx, Some(&old_entry), None)?;
-					Ok(true)
+					Ok(Some(k))
 				}
-				_ => Ok(false),
+				_ => Ok(None),
 			})?;
 
-		if removed {
+		if let Some(k) = removed {
 			self.metrics.internal_delete_counter.add(1);
+            self.merkle_todo.submit(k, &[])?;
 			self.merkle_todo_notify.notify_one();
-		}
-		Ok(removed)
+            Ok(true)
+		} else {
+            Ok(false)
+        }
 	}
 
 	// ---- Insert queue functions ----
@@ -365,9 +364,5 @@ impl<F: TableSchema, R: TableReplication> TableData<F, R> {
 				)))
 			}
 		}
-	}
-
-	pub fn gc_todo_len(&self) -> Result<usize, Error> {
-		Ok(self.gc_todo.len()?)
 	}
 }
