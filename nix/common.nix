@@ -1,4 +1,6 @@
-let
+{
+  system ? builtins.currentSystem,
+}: let
   lock = builtins.fromJSON (builtins.readFile ../flake.lock);
 
   inherit (lock.nodes.flake-compat.locked) owner repo rev narHash;
@@ -8,7 +10,7 @@ let
     sha256 = narHash;
   };
 
-  flake = (import flake-compat { system = builtins.currentSystem; src = ../.; });
+  flake = (import flake-compat { inherit system; src = ../.; });
 in
 rec {
   pkgsSrc = flake.defaultNix.inputs.nixpkgs;
