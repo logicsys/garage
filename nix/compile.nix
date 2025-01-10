@@ -4,6 +4,52 @@
 let
   log = v: builtins.trace v v;
 
+  targetIsWindows = target == "x86_64-w64-mingw32";
+
+  pkgsNative = import pkgsSrc { inherit system; };
+
+  # HACK: work around https://github.com/NixOS/nixpkgs/issues/177129
+  # Though this is an issue between Clang and GCC,
+  # so it may not get fixed anytime soon...
+  empty-libgcc_eh = pkgsNative.stdenv.mkDerivation {
+    pname = "empty-libgcc_eh";
+    version = "0";
+    dontUnpack = true;
+    installPhase = ''
+      mkdir -p "$out"/lib
+      "${pkgsNative.binutils}"/bin/ar r "$out"/lib/libgcc_eh.a
+    '';
+  };
+
+  # HACK: winapi contains a bunch of statically linked libraries embedded in the
+  # repo. Its build.rs would normally correctly find these files, but I guess
+  # cargo2nix gets in the way somehow. We download the repo manually so we can
+  # link into it.
+  #
+  # Btw... where did these static library files come from? We just trust them?
+  winapi-rs = pkgsNative.fetchFromGitHub {
+    owner = "retep998";
+    repo = "winapi-rs";
+    rev = "0.3.9"; # Must match the version found in Cargo.lock
+    hash = "sha256-/Qoz8kNsjnDEqkH/vciuzGAT1dpL7d94nbQnQh5sGQw=";
+  };
+
+  # HACK: see winapi-rs comment, same applies here but for the windows crate.
+  windows-rs-0-48-5 = pkgsNative.fetchFromGitHub {
+    owner = "microsoft";
+    repo = "windows-rs";
+    rev = "0.48.5"; # Must match the version found in Cargo.lock
+    hash = "sha256-24c1TBaNu742eZUlzo0ChVlln2tJALc8KUs+fbqP9po=";
+  };
+
+  # HACK: see winapi-rs comment, same applies here but for the windows crate.
+  windows-rs-0-52-0 = pkgsNative.fetchFromGitHub {
+    owner = "microsoft";
+    repo = "windows-rs";
+    rev = "0.52.0"; # Must match the version found in Cargo.lock
+    hash = "sha256-ZhsIAtiVPuBeNlkYnPEMrZh4FZJKnQyynXws5zv+8KI=";
+  };
+
   pkgs = if target != null then
     import pkgsSrc {
       inherit system;
@@ -80,6 +126,17 @@ let
               # [2]
               hardeningDisable = [ "pie" ];
             };
+
+        overrideArgs = old:
+          if targetIsWindows then {
+            rustcLinkFlags = old.rustcLinkFlags or [] ++ [
+              "-L${pkgs.windows.pthreads}/lib"
+              "-L${empty-libgcc_eh}/lib"
+              "-L${winapi-rs}/x86_64/lib"
+              "-L${windows-rs-0-48-5}/crates/targets/x86_64_gnu/lib"
+              "-L${windows-rs-0-52-0}/crates/targets/x86_64_gnu/lib"
+            ];
+          } else {};
       })
 
       (pkgs.rustBuilder.rustLib.makeOverride {
@@ -147,9 +204,20 @@ let
 
       (pkgs.rustBuilder.rustLib.makeOverride {
         name = "libsodium-sys";
+
         overrideArgs = old: {
           features = [ ]; # [4]
         };
+
+        # libsodium-sys doesn't consider windows-gnu to be a "supported" build
+        # target, even though libsodium itself releases official mingw builds.
+        # Use nix's own libsodium, via a special envvar, instead.
+        overrideAttrs = drv: if targetIsWindows then {
+          setBuildEnv = ''
+            ${drv.setBuildEnv}
+            export SODIUM_LIB_DIR=${pkgs.libsodium}/lib
+          '';
+        } else {};
       })
 
       (pkgs.rustBuilder.rustLib.makeOverride {
@@ -157,6 +225,17 @@ let
         overrideArgs = old: {
           features = [ ]; # [4]
         };
+      })
+
+      (pkgs.rustBuilder.rustLib.makeOverride {
+        name = "timeago";
+        overrideArgs = old:
+          if targetIsWindows then {
+            rustcLinkFlags = old.rustcLinkFlags or [] ++ [
+              "-L${pkgs.windows.pthreads}/lib"
+              "-L${empty-libgcc_eh}/lib"
+            ];
+          } else {};
       })
     ];
 
@@ -204,11 +283,18 @@ let
     ]; # segfault with static-pie
     "x86_64-unknown-linux-musl" =
       [ "target-feature=+crt-static" "link-arg=-static-pie" ];
+    "x86_64-pc-windows-gnu" = [
+      "target-feature=+crt-static"
+      "link-arg=-static-pie"
+    ];
   };
+
 
   # NixOS and Rust/Cargo triples do not match for ARM, fix it here.
   rustTarget = if target == "armv6l-unknown-linux-musleabihf" then
     "arm-unknown-linux-musleabihf"
+  else if targetIsWindows then
+    "x86_64-pc-windows-gnu"
   else
     target;
 
