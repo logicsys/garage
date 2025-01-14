@@ -863,17 +863,27 @@ impl NodeStatus {
 /// Obtain the list of currently available IP addresses on all non-loopback
 /// interfaces, optionally filtering them to be inside a given IpNet.
 fn get_default_ip(filter_ipnet: Option<ipnet::IpNet>) -> Option<IpAddr> {
+	// pnet creates a dependency on winpcap, which is a giant pain to get working with
+	// cross-compilation.
+	#[cfg(windows)]
+	{
+		None
+	}
+
+	#[cfg(not(windows))]
+	{
 	pnet_datalink::interfaces()
-		.into_iter()
-		// filter down and loopback interfaces
-		.filter(|i| i.is_up() && !i.is_loopback())
-		// get all IPs
-		.flat_map(|e| e.ips)
-		// optionally, filter to be inside filter_ipnet
-		.find(|ipn| {
-			filter_ipnet.is_some_and(|ipnet| ipnet.contains(&ipn.ip())) || filter_ipnet.is_none()
-		})
-		.map(|ipn| ipn.ip())
+			.into_iter()
+			// filter down and loopback interfaces
+			.filter(|i| i.is_up() && !i.is_loopback())
+			// get all IPs
+			.flat_map(|e| e.ips)
+			// optionally, filter to be inside filter_ipnet
+			.find(|ipn| {
+				filter_ipnet.is_some_and(|ipnet| ipnet.contains(&ipn.ip())) || filter_ipnet.is_none()
+			})
+			.map(|ipn| ipn.ip())
+	}
 }
 
 fn get_rpc_public_addr(config: &Config) -> Option<SocketAddr> {
