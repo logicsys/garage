@@ -792,11 +792,7 @@ impl BlockManagerLocked {
 			// Now, we do an fsync on the containing directory, to ensure that the rename
 			// is persisted properly. See:
 			// http://thedjbway.b0llix.net/qmail/syncdir.html
-			let dir = fs::OpenOptions::new()
-				.read(true)
-				.mode(0)
-				.open(directory)
-				.await?;
+			let dir = fs::OpenOptions::new().read(true).open(directory).await?;
 			dir.sync_all().await?;
 			drop(dir);
 		}
