@@ -219,11 +219,21 @@ pub fn gen_node_key(metadata_dir: &Path) -> Result<NodeKey, Error> {
 		let (pubkey, key) = ed25519::gen_keypair();
 
 		{
-			use std::os::unix::fs::PermissionsExt;
 			let mut f = std::fs::File::create(key_file.as_path())?;
-			let mut perm = f.metadata()?.permissions();
-			perm.set_mode(0o600);
-			std::fs::set_permissions(key_file.as_path(), perm)?;
+
+			#[cfg(not(windows))]
+			{
+				use std::os::unix::fs::PermissionsExt;
+				let mut perm = f.metadata()?.permissions();
+				perm.set_mode(0o600);
+			    std::fs::set_permissions(key_file.as_path(), perm)?;
+			}
+
+			#[cfg(windows)]
+			{
+				// TODO(mediocregopher): set permissions on windows
+			}
+
 			f.write_all(&key[..])?;
 		}
 
@@ -805,6 +815,7 @@ impl NodeStatus {
 		}
 	}
 
+    #[cfg(not(windows))]
 	fn update_disk_usage(&mut self, meta_dir: &Path, data_dir: &DataDirEnum) {
 		use nix::sys::statvfs::statvfs;
 		let mount_avail = |path: &Path| match statvfs(path) {
@@ -842,6 +853,11 @@ impl NodeStatus {
 			})(),
 		};
 	}
+
+    #[cfg(windows)]
+	fn update_disk_usage(&mut self, _meta_dir: &Path, _data_dir: &DataDirEnum) {
+        // TODO(mediocregopher): update disk usage on windows, only used for metrics
+    }
 }
 
 /// Obtain the list of currently available IP addresses on all non-loopback
