@@ -1,6 +1,4 @@
 use std::convert::Infallible;
-use std::fs::{self, Permissions};
-use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -18,7 +16,7 @@ use hyper::{HeaderMap, StatusCode};
 use hyper_util::rt::TokioIo;
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::{TcpListener, TcpStream, UnixListener, UnixStream};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
 use tokio::time::{sleep_until, Instant};
 
@@ -119,7 +117,13 @@ impl<A: ApiHandler> ApiServer<A> {
 				let handler = move |request, socketaddr| self.clone().handler(request, socketaddr);
 				server_loop(server_name, listener, handler, must_exit).await
 			}
+
+			#[cfg(not(windows))]
 			UnixOrTCPSocketAddress::UnixSocket(ref path) => {
+				use std::fs::{self, Permissions};
+				use std::os::unix::fs::PermissionsExt;
+				use tokio::net::UnixListener;
+
 				if path.exists() {
 					fs::remove_file(path)?
 				}
@@ -134,6 +138,11 @@ impl<A: ApiHandler> ApiServer<A> {
 
 				let handler = move |request, socketaddr| self.clone().handler(request, socketaddr);
 				server_loop(server_name, listener, handler, must_exit).await
+			}
+
+			#[cfg(windows)]
+			UnixOrTCPSocketAddress::UnixSocket(ref _path) => {
+				panic!("Unix domain sockets are not supported on windows yet: https://github.com/tokio-rs/tokio/issues/2201");
 			}
 		}
 	}
@@ -264,11 +273,13 @@ impl Accept for TcpListener {
 	}
 }
 
-pub struct UnixListenerOn(pub UnixListener, pub String);
+#[cfg(not(windows))]
+pub struct UnixListenerOn(pub tokio::net::UnixListener, pub String);
 
+#[cfg(not(windows))]
 #[async_trait]
 impl Accept for UnixListenerOn {
-	type Stream = UnixStream;
+	type Stream = tokio::net::UnixStream;
 	async fn accept(&self) -> std::io::Result<(Self::Stream, String)> {
 		self.0
 			.accept()
