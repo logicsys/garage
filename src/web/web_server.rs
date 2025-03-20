@@ -18,10 +18,10 @@ use opentelemetry::{
 
 use crate::error::*;
 
-use garage_api_common::generic_server::server_loop;
 use garage_api_common::cors::{
 	add_cors_headers, find_matching_cors_rule, handle_options_for_bucket,
 };
+use garage_api_common::generic_server::server_loop;
 use garage_api_common::helpers::*;
 use garage_api_s3::error::{
 	CommonErrorDerivative, Error as ApiError, OkOrBadRequest, OkOrInternalError,
@@ -103,10 +103,10 @@ impl WebServer {
 
 			#[cfg(not(windows))]
 			UnixOrTCPSocketAddress::UnixSocket(ref path) => {
+				use garage_api_common::generic_server::UnixListenerOn;
 				use std::fs::{self, Permissions};
 				use std::os::unix::prelude::PermissionsExt;
 				use tokio::net::UnixListener;
-				use garage_api_common::generic_server::UnixListenerOn;
 
 				if path.exists() {
 					fs::remove_file(path)?

@@ -225,7 +225,7 @@ pub fn gen_node_key(metadata_dir: &Path) -> Result<NodeKey, Error> {
 				use std::os::unix::fs::PermissionsExt;
 				let mut perm = f.metadata()?.permissions();
 				perm.set_mode(0o600);
-			    std::fs::set_permissions(key_file.as_path(), perm)?;
+				std::fs::set_permissions(key_file.as_path(), perm)?;
 			}
 
 			#[cfg(windows)]
@@ -813,7 +813,7 @@ impl NodeStatus {
 		}
 	}
 
-    #[cfg(not(windows))]
+	#[cfg(not(windows))]
 	fn update_disk_usage(&mut self, meta_dir: &Path, data_dir: &DataDirEnum) {
 		use nix::sys::statvfs::statvfs;
 
@@ -876,10 +876,10 @@ impl NodeStatus {
 		};
 	}
 
-    #[cfg(windows)]
+	#[cfg(windows)]
 	fn update_disk_usage(&mut self, _meta_dir: &Path, _data_dir: &DataDirEnum) {
-        // TODO(mediocregopher): update disk usage on windows, only used for metrics
-    }
+		// TODO(mediocregopher): update disk usage on windows, only used for metrics
+	}
 }
 
 /// Obtain the list of currently available IP addresses on all non-loopback
@@ -894,7 +894,7 @@ fn get_default_ip(filter_ipnet: Option<ipnet::IpNet>) -> Option<IpAddr> {
 
 	#[cfg(not(windows))]
 	{
-	pnet_datalink::interfaces()
+		pnet_datalink::interfaces()
 			.into_iter()
 			// filter down and loopback interfaces
 			.filter(|i| i.is_up() && !i.is_loopback())
@@ -902,7 +902,8 @@ fn get_default_ip(filter_ipnet: Option<ipnet::IpNet>) -> Option<IpAddr> {
 			.flat_map(|e| e.ips)
 			// optionally, filter to be inside filter_ipnet
 			.find(|ipn| {
-				filter_ipnet.is_some_and(|ipnet| ipnet.contains(&ipn.ip())) || filter_ipnet.is_none()
+				filter_ipnet.is_some_and(|ipnet| ipnet.contains(&ipn.ip()))
+					|| filter_ipnet.is_none()
 			})
 			.map(|ipn| ipn.ip())
 	}
