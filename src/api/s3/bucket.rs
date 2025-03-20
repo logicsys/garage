@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use http_body_util::BodyExt;
 use hyper::{Request, Response, StatusCode};
 
 use garage_model::bucket_alias_table::*;
@@ -10,15 +9,14 @@ use garage_model::key_table::Key;
 use garage_model::permission::BucketKeyPerm;
 use garage_table::util::*;
 use garage_util::crdt::*;
-use garage_util::data::*;
 use garage_util::time::*;
 
-use crate::common_error::CommonError;
-use crate::helpers::*;
-use crate::s3::api_server::{ReqBody, ResBody};
-use crate::s3::error::*;
-use crate::s3::xml as s3_xml;
-use crate::signature::verify_signed_content;
+use garage_api_common::common_error::CommonError;
+use garage_api_common::helpers::*;
+
+use crate::api_server::{ReqBody, ResBody};
+use crate::error::*;
+use crate::xml as s3_xml;
 
 pub fn handle_get_bucket_location(ctx: ReqCtx) -> Result<Response<ResBody>, Error> {
 	let ReqCtx { garage, .. } = ctx;
@@ -121,15 +119,10 @@ pub async fn handle_list_buckets(
 pub async fn handle_create_bucket(
 	garage: &Garage,
 	req: Request<ReqBody>,
-	content_sha256: Option<Hash>,
 	api_key_id: &String,
 	bucket_name: String,
 ) -> Result<Response<ResBody>, Error> {
-	let body = BodyExt::collect(req.into_body()).await?.to_bytes();
-
-	if let Some(content_sha256) = content_sha256 {
-		verify_signed_content(content_sha256, &body[..])?;
-	}
+	let body = req.into_body().collect().await?;
 
 	let cmd =
 		parse_create_bucket_xml(&body[..]).ok_or_bad_request("Invalid create bucket XML query")?;

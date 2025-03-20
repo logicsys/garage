@@ -1,16 +1,15 @@
-use http_body_util::BodyExt;
 use hyper::{Request, Response, StatusCode};
 
 use garage_util::data::*;
 
 use garage_model::s3::object_table::*;
 
-use crate::helpers::*;
-use crate::s3::api_server::{ReqBody, ResBody};
-use crate::s3::error::*;
-use crate::s3::put::next_timestamp;
-use crate::s3::xml as s3_xml;
-use crate::signature::verify_signed_content;
+use garage_api_common::helpers::*;
+
+use crate::api_server::{ReqBody, ResBody};
+use crate::error::*;
+use crate::put::next_timestamp;
+use crate::xml as s3_xml;
 
 async fn handle_delete_internal(ctx: &ReqCtx, key: &str) -> Result<(Uuid, Uuid), Error> {
 	let ReqCtx {
@@ -67,13 +66,8 @@ pub async fn handle_delete(ctx: ReqCtx, key: &str) -> Result<Response<ResBody>, 
 pub async fn handle_delete_objects(
 	ctx: ReqCtx,
 	req: Request<ReqBody>,
-	content_sha256: Option<Hash>,
 ) -> Result<Response<ResBody>, Error> {
-	let body = BodyExt::collect(req.into_body()).await?.to_bytes();
-
-	if let Some(content_sha256) = content_sha256 {
-		verify_signed_content(content_sha256, &body[..])?;
-	}
+	let body = req.into_body().collect().await?;
 
 	let cmd_xml = roxmltree::Document::parse(std::str::from_utf8(&body)?)?;
 	let cmd = parse_delete_objects_xml(&cmd_xml).ok_or_bad_request("Invalid delete XML query")?;

@@ -6,13 +6,13 @@ use garage_util::background::*;
 use garage_util::config::*;
 use garage_util::error::Error;
 
-use garage_api::admin::api_server::AdminApiServer;
-use garage_api::s3::api_server::S3ApiServer;
+use garage_api_admin::api_server::AdminApiServer;
+use garage_api_s3::api_server::S3ApiServer;
 use garage_model::garage::Garage;
 use garage_web::WebServer;
 
 #[cfg(feature = "k2v")]
-use garage_api::k2v::api_server::K2VApiServer;
+use garage_api_k2v::api_server::K2VApiServer;
 
 use crate::admin::*;
 use crate::secrets::{fill_secrets, Secrets};
@@ -113,7 +113,7 @@ pub async fn run_server(config_file: PathBuf, secrets: Secrets) -> Result<(), Er
 
 	if let Some(web_config) = &config.s3_web {
 		info!("Initializing web server...");
-		let web_server = WebServer::new(garage.clone(), web_config.root_domain.clone());
+		let web_server = WebServer::new(garage.clone(), &web_config);
 		servers.push((
 			"Web",
 			tokio::spawn(web_server.run(web_config.bind_addr.clone(), watch_cancel.clone())),

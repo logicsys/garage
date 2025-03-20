@@ -12,9 +12,9 @@
 
   flake = (import flake-compat { inherit system; src = ../.; });
 in
-rec {
-  pkgsSrc = flake.defaultNix.inputs.nixpkgs;
-  cargo2nix = flake.defaultNix.inputs.cargo2nix;
-  cargo2nixOverlay = cargo2nix.overlays.default;
-  devShells = builtins.getAttr builtins.currentSystem flake.defaultNix.devShells;
+
+{
+  flake = flake.defaultNix;
+  nixpkgs = flake.defaultNix.inputs.nixpkgs;
+  devShells = flake.defaultNix.devShells.${builtins.currentSystem};
 }

@@ -13,13 +13,14 @@ use garage_model::s3::object_table::*;
 
 use garage_table::EnumerationOrder;
 
-use crate::encoding::*;
-use crate::helpers::*;
-use crate::s3::api_server::{ReqBody, ResBody};
-use crate::s3::encryption::EncryptionParams;
-use crate::s3::error::*;
-use crate::s3::multipart as s3_multipart;
-use crate::s3::xml as s3_xml;
+use garage_api_common::encoding::*;
+use garage_api_common::helpers::*;
+
+use crate::api_server::{ReqBody, ResBody};
+use crate::encryption::EncryptionParams;
+use crate::error::*;
+use crate::multipart as s3_multipart;
+use crate::xml as s3_xml;
 
 const DUMMY_NAME: &str = "Dummy Key";
 const DUMMY_KEY: &str = "GKDummyKey";
@@ -53,7 +54,6 @@ pub struct ListMultipartUploadsQuery {
 #[derive(Debug)]
 pub struct ListPartsQuery {
 	pub bucket_name: String,
-	pub bucket_id: Uuid,
 	pub key: String,
 	pub upload_id: String,
 	pub part_number_marker: Option<u64>,
@@ -398,7 +398,7 @@ enum ExtractionResult {
 		key: String,
 	},
 	// Fallback key is used for legacy APIs that only support
-	// exlusive pagination (and not inclusive one).
+	// exclusive pagination (and not inclusive one).
 	SkipTo {
 		key: String,
 		fallback_key: Option<String>,
@@ -408,7 +408,7 @@ enum ExtractionResult {
 #[derive(PartialEq, Clone, Debug)]
 enum RangeBegin {
 	// Fallback key is used for legacy APIs that only support
-	// exlusive pagination (and not inclusive one).
+	// exclusive pagination (and not inclusive one).
 	IncludingKey {
 		key: String,
 		fallback_key: Option<String>,
@@ -1244,10 +1244,8 @@ mod tests {
 
 	#[test]
 	fn test_fetch_part_info() -> Result<(), Error> {
-		let uuid = Uuid::from([0x08; 32]);
 		let mut query = ListPartsQuery {
 			bucket_name: "a".to_string(),
-			bucket_id: uuid,
 			key: "a".to_string(),
 			upload_id: "xx".to_string(),
 			part_number_marker: None,

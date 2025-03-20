@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate tracing;
+
 pub mod api_server;
 pub mod error;
 
@@ -11,9 +14,8 @@ mod list;
 mod multipart;
 mod post_object;
 mod put;
-mod website;
+pub mod website;
 
-mod checksum;
 mod encryption;
 mod router;
 pub mod xml;

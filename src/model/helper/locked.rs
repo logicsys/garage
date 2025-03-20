@@ -27,8 +27,15 @@ use crate::permission::BucketKeyPerm;
 /// See issues: #649, #723
 pub struct LockedHelper<'a>(
 	pub(crate) &'a Garage,
-	pub(crate) tokio::sync::MutexGuard<'a, ()>,
+	pub(crate) Option<tokio::sync::MutexGuard<'a, ()>>,
 );
+
+impl<'a> Drop for LockedHelper<'a> {
+	fn drop(&mut self) {
+		// make it explicit that the mutexguard lives until here
+		drop(self.1.take())
+	}
+}
 
 #[allow(clippy::ptr_arg)]
 impl<'a> LockedHelper<'a> {
@@ -231,7 +238,7 @@ impl<'a> LockedHelper<'a> {
 		let bucket_p_local_alias_key = (key.key_id.clone(), alias_name.clone());
 
 		// Calculate the timestamp to assign to this aliasing in the two local_aliases maps
-		// (the one from key to bucket, and the reverse one stored in the bucket iself)
+		// (the one from key to bucket, and the reverse one stored in the bucket itself)
 		// so that merges on both maps in case of a concurrent operation resolve
 		// to the same alias being set
 		let alias_ts = increment_logical_clock_2(

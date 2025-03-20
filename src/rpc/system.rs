@@ -7,7 +7,6 @@ use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwapOption;
-use async_trait::async_trait;
 use futures::join;
 use serde::{Deserialize, Serialize};
 use sodiumoxide::crypto::sign::ed25519;
@@ -54,7 +53,7 @@ pub const SYSTEM_RPC_PATH: &str = "garage_rpc/system.rs/SystemRpc";
 /// RPC messages related to membership
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum SystemRpc {
-	/// Response to successfull advertisements
+	/// Response to successful advertisements
 	Ok,
 	/// Request to connect to a specific node (in <pubkey>@<host>:<port> format, pubkey = full-length node ID)
 	Connect(String),
@@ -172,7 +171,7 @@ pub struct ClusterHealth {
 pub enum ClusterHealthStatus {
 	/// All nodes are available
 	Healthy,
-	/// Some storage nodes are unavailable, but quorum is stil
+	/// Some storage nodes are unavailable, but quorum is still
 	/// achieved for all partitions
 	Degraded,
 	/// Quorum is not available for some partitions
@@ -296,7 +295,7 @@ impl System {
 		let mut local_status = NodeStatus::initial(replication_factor, &layout_manager);
 		local_status.update_disk_usage(&config.metadata_dir, &config.data_dir);
 
-		// ---- if enabled, set up additionnal peer discovery methods ----
+		// ---- if enabled, set up additional peer discovery methods ----
 		#[cfg(feature = "consul-discovery")]
 		let consul_discovery = match &config.consul_discovery {
 			Some(cfg) => Some(
@@ -347,7 +346,7 @@ impl System {
 		Ok(sys)
 	}
 
-	/// Perform bootstraping, starting the ping loop
+	/// Perform bootstrapping, starting the ping loop
 	pub async fn run(self: Arc<Self>, must_exit: watch::Receiver<bool>) {
 		join!(
 			self.netapp.clone().listen(
@@ -759,7 +758,6 @@ impl System {
 	}
 }
 
-#[async_trait]
 impl EndpointHandler<SystemRpc> for System {
 	async fn handle(self: &Arc<Self>, msg: &SystemRpc, from: NodeID) -> Result<SystemRpc, Error> {
 		match msg {

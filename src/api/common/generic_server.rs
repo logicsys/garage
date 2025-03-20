@@ -2,8 +2,6 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
-
 use futures::future::Future;
 use futures::stream::{futures_unordered::FuturesUnordered, StreamExt};
 
@@ -34,7 +32,7 @@ use garage_util::socket_address::UnixOrTCPSocketAddress;
 
 use crate::helpers::{BoxBody, ErrorBody};
 
-pub(crate) trait ApiEndpoint: Send + Sync + 'static {
+pub trait ApiEndpoint: Send + Sync + 'static {
 	fn name(&self) -> &'static str;
 	fn add_span_attributes(&self, span: SpanRef<'_>);
 }
@@ -45,8 +43,7 @@ pub trait ApiError: std::error::Error + Send + Sync + 'static {
 	fn http_body(&self, garage_region: &str, path: &str) -> ErrorBody;
 }
 
-#[async_trait]
-pub(crate) trait ApiHandler: Send + Sync + 'static {
+pub trait ApiHandler: Send + Sync + 'static {
 	const API_NAME: &'static str;
 	const API_NAME_DISPLAY: &'static str;
 
@@ -54,14 +51,14 @@ pub(crate) trait ApiHandler: Send + Sync + 'static {
 	type Error: ApiError;
 
 	fn parse_endpoint(&self, r: &Request<IncomingBody>) -> Result<Self::Endpoint, Self::Error>;
-	async fn handle(
+	fn handle(
 		&self,
 		req: Request<IncomingBody>,
 		endpoint: Self::Endpoint,
-	) -> Result<Response<BoxBody<Self::Error>>, Self::Error>;
+	) -> impl Future<Output = Result<Response<BoxBody<Self::Error>>, Self::Error>> + Send;
 }
 
-pub(crate) struct ApiServer<A: ApiHandler> {
+pub struct ApiServer<A: ApiHandler> {
 	region: String,
 	api_handler: A,
 
@@ -257,13 +254,11 @@ impl<A: ApiHandler> ApiServer<A> {
 
 // ==== helper functions ====
 
-#[async_trait]
 pub trait Accept: Send + Sync + 'static {
 	type Stream: AsyncRead + AsyncWrite + Send + Sync + 'static;
-	async fn accept(&self) -> std::io::Result<(Self::Stream, String)>;
+	fn accept(&self) -> impl Future<Output = std::io::Result<(Self::Stream, String)>> + Send;
 }
 
-#[async_trait]
 impl Accept for TcpListener {
 	type Stream = TcpStream;
 	async fn accept(&self) -> std::io::Result<(Self::Stream, String)> {
@@ -277,7 +272,6 @@ impl Accept for TcpListener {
 pub struct UnixListenerOn(pub tokio::net::UnixListener, pub String);
 
 #[cfg(not(windows))]
-#[async_trait]
 impl Accept for UnixListenerOn {
 	type Stream = tokio::net::UnixStream;
 	async fn accept(&self) -> std::io::Result<(Self::Stream, String)> {

@@ -13,6 +13,7 @@ consistency_mode = "consistent"
 
 metadata_dir = "/var/lib/garage/meta"
 data_dir = "/var/lib/garage/data"
+metadata_snapshots_dir = "/var/lib/garage/snapshots"
 metadata_fsync = true
 data_fsync = false
 disable_scrub = false
@@ -74,6 +75,7 @@ root_domain = ".s3.garage"
 [s3_web]
 bind_addr = "[::]:3902"
 root_domain = ".web.garage"
+add_host_to_metrics = true
 
 [admin]
 api_bind_addr = "0.0.0.0:3903"
@@ -105,6 +107,7 @@ Top-level configuration options:
 [`metadata_auto_snapshot_interval`](#metadata_auto_snapshot_interval),
 [`metadata_dir`](#metadata_dir),
 [`metadata_fsync`](#metadata_fsync),
+[`metadata_snapshots_dir`](#metadata_snapshots_dir),
 [`replication_factor`](#replication_factor),
 [`consistency_mode`](#consistency_mode),
 [`rpc_bind_addr`](#rpc_bind_addr),
@@ -136,6 +139,7 @@ The `[s3_api]` section:
 [`s3_region`](#s3_region).
 
 The `[s3_web]` section:
+[`add_host_to_metrics`](#web_add_host_to_metrics),
 [`bind_addr`](#web_bind_addr),
 [`root_domain`](#web_root_domain).
 
@@ -150,7 +154,7 @@ The `[admin]` section:
 The following configuration parameter must be specified as an environment
 variable, it does not exist in the configuration file:
 
-- `GARAGE_LOG_TO_SYSLOG` (since v0.9.4): set this to `1` or `true` to make the
+- `GARAGE_LOG_TO_SYSLOG` (since `v0.9.4`): set this to `1` or `true` to make the
   Garage daemon send its logs to `syslog` (using the libc `syslog` function)
   instead of printing to stderr.
 
@@ -275,6 +279,7 @@ as the index of all objects, object version and object blocks.
 
 Store this folder on a fast SSD drive if possible to maximize Garage's performance.
 
+
 #### `data_dir` {#data_dir}
 
 The directory in which Garage will store the data blocks of objects.
@@ -294,6 +299,25 @@ data_dir = [
 
 See [the dedicated documentation page](@/documentation/operations/multi-hdd.md)
 on how to operate Garage in such a setup.
+
+#### `metadata_snapshots_dir` (since `v1.1.0`) {#metadata_snapshots_dir}
+
+The directory in which Garage will store metadata snapshots when it
+performs a snapshot of the metadata database, either when instructed to do
+so from a RPC call or regularly through
+[`metadata_auto_snapshot_interval`](#metadata_auto_snapshot_interval).
+
+By default, Garage will store snapshots into a `snapshots/` subdirectory
+of [`metadata_dir`](#metadata_dir). This might quickly fill up your
+metadata storage space if you use snapshots, because Garage will need up
+to 4x the space of the existing metadata database: each snapshot requires
+roughly as much space as the original database, and Garage temporarily
+needs to store up to three different snapshots before it cleans up the oldest
+snapshot to go back to two stored snapshots.
+
+To prevent filling your disk, you might to change this setting to a
+directory with ample available space, e.g. on the same storage space as
+[`data_dir`](#data_dir).
 
 #### `db_engine` (since `v0.8.0`) {#db_engine}
 
@@ -392,7 +416,7 @@ at the cost of a moderate drop in write performance.
 Similarly to `metatada_fsync`, this is likely not necessary
 if geographical replication is used.
 
-#### `metadata_auto_snapshot_interval` (since Garage v0.9.4) {#metadata_auto_snapshot_interval}
+#### `metadata_auto_snapshot_interval` (since `v0.9.4`) {#metadata_auto_snapshot_interval}
 
 If this value is set, Garage will automatically take a snapshot of the metadata
 DB file at a regular interval and save it in the metadata directory.
@@ -429,7 +453,7 @@ you should delete it from the data directory and then call `garage repair
 blocks` on the node to ensure that it re-obtains a copy from another node on
 the network.
 
-#### `use_local_tz` {#use_local_tz}
+#### `use_local_tz` (since `v1.1.0`) {#use_local_tz}
 
 By default, Garage runs the lifecycle worker every day at midnight in UTC. Set the
 `use_local_tz` configuration value to `true` if you want Garage to run the
@@ -451,7 +475,7 @@ files will remain available. This however means that chunks from existing files
 will not be deduplicated with chunks from newly uploaded files, meaning you
 might use more storage space that is optimally possible.
 
-#### `block_ram_buffer_max` (since v0.9.4) {#block_ram_buffer_max}
+#### `block_ram_buffer_max` (since `v0.9.4`) {#block_ram_buffer_max}
 
 A limit on the total size of data blocks kept in RAM by S3 API nodes awaiting
 to be sent to storage nodes asynchronously.
@@ -538,7 +562,7 @@ the node, even in the case of a NAT: the NAT should be configured to forward the
 port number to the same internal port nubmer. This means that if you have several nodes running
 behind a NAT, they should each use a different RPC port number.
 
-#### `rpc_bind_outgoing`(since v0.9.2) {#rpc_bind_outgoing}
+#### `rpc_bind_outgoing` (since `v0.9.2`) {#rpc_bind_outgoing}
 
 If enabled, pre-bind all sockets for outgoing connections to the same IP address
 used for listening (the IP address specified in `rpc_bind_addr`) before
@@ -721,6 +745,13 @@ The optional suffix appended to bucket names for the corresponding HTTP Host.
 For instance, if `root_domain` is `web.garage.eu`, a bucket called `deuxfleurs.fr`
 will be accessible either with hostname `deuxfleurs.fr.web.garage.eu`
 or with hostname `deuxfleurs.fr`.
+
+#### `add_host_to_metrics` {#web_add_host_to_metrics}
+
+Whether to include the requested domain name (HTTP `Host` header) in the
+Prometheus metrics of the web endpoint. This is disabled by default as the
+number of possible values is not bounded and can be a source of cardinality
+explosion in the exported metrics.
 
 
 ### The `[admin]` section

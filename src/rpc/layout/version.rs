@@ -471,7 +471,7 @@ impl LayoutVersion {
 			}
 		}
 
-		// We clear the ring assignemnt data
+		// We clear the ring assignment data
 		self.ring_assignment_data = Vec::<CompactNodeType>::new();
 
 		Ok(Some(old_assignment))
@@ -650,8 +650,11 @@ impl LayoutVersion {
 		let mut cost = CostFunction::new();
 		for (p, assoc_p) in prev_assign.iter().enumerate() {
 			for n in assoc_p.iter() {
-				let node_zone = zone_to_id[self.expect_get_node_zone(&self.node_id_vec[*n])];
-				cost.insert((Vertex::PZ(p, node_zone), Vertex::N(*n)), -1);
+				if let Some(&node_zone) =
+					zone_to_id.get(self.expect_get_node_zone(&self.node_id_vec[*n]))
+				{
+					cost.insert((Vertex::PZ(p, node_zone), Vertex::N(*n)), -1);
+				}
 			}
 		}
 
@@ -751,8 +754,11 @@ impl LayoutVersion {
 					if let Some(prev_assign) = prev_assign_opt {
 						let mut old_zones_of_p = Vec::<usize>::new();
 						for n in prev_assign[p].iter() {
-							old_zones_of_p
-								.push(zone_to_id[self.expect_get_node_zone(&self.node_id_vec[*n])]);
+							if let Some(&zone_id) =
+								zone_to_id.get(self.expect_get_node_zone(&self.node_id_vec[*n]))
+							{
+								old_zones_of_p.push(zone_id);
+							}
 						}
 						if !old_zones_of_p.contains(&z) {
 							new_partitions_zone[z] += 1;

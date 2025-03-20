@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
-
 use hyper::header;
 use hyper::{body::Incoming as IncomingBody, Request, Response};
 use tokio::sync::watch;
@@ -14,33 +12,33 @@ use garage_util::socket_address::UnixOrTCPSocketAddress;
 use garage_model::garage::Garage;
 use garage_model::key_table::Key;
 
-use crate::generic_server::*;
-use crate::s3::error::*;
+use garage_api_common::cors::*;
+use garage_api_common::generic_server::*;
+use garage_api_common::helpers::*;
+use garage_api_common::signature::verify_request;
 
-use crate::signature::verify_request;
+use crate::bucket::*;
+use crate::copy::*;
+use crate::cors::*;
+use crate::delete::*;
+use crate::error::*;
+use crate::get::*;
+use crate::lifecycle::*;
+use crate::list::*;
+use crate::multipart::*;
+use crate::post_object::handle_post_object;
+use crate::put::*;
+use crate::router::Endpoint;
+use crate::website::*;
 
-use crate::helpers::*;
-use crate::s3::bucket::*;
-use crate::s3::copy::*;
-use crate::s3::cors::*;
-use crate::s3::delete::*;
-use crate::s3::get::*;
-use crate::s3::lifecycle::*;
-use crate::s3::list::*;
-use crate::s3::multipart::*;
-use crate::s3::post_object::handle_post_object;
-use crate::s3::put::*;
-use crate::s3::router::Endpoint;
-use crate::s3::website::*;
-
-pub use crate::signature::streaming::ReqBody;
+pub use garage_api_common::signature::streaming::ReqBody;
 pub type ResBody = BoxBody<Error>;
 
 pub struct S3ApiServer {
 	garage: Arc<Garage>,
 }
 
-pub(crate) struct S3ApiEndpoint {
+pub struct S3ApiEndpoint {
 	bucket_name: Option<String>,
 	endpoint: Endpoint,
 }
@@ -70,7 +68,6 @@ impl S3ApiServer {
 	}
 }
 
-#[async_trait]
 impl ApiHandler for S3ApiServer {
 	const API_NAME: &'static str = "s3";
 	const API_NAME_DISPLAY: &'static str = "S3";
@@ -124,7 +121,9 @@ impl ApiHandler for S3ApiServer {
 			return Ok(options_res.map(|_empty_body: EmptyBody| empty_body()));
 		}
 
-		let (req, api_key, content_sha256) = verify_request(&garage, req, "s3").await?;
+		let verified_request = verify_request(&garage, req, "s3").await?;
+		let req = verified_request.request;
+		let api_key = verified_request.access_key;
 
 		let bucket_name = match bucket_name {
 			None => {
@@ -137,20 +136,14 @@ impl ApiHandler for S3ApiServer {
 
 		// Special code path for CreateBucket API endpoint
 		if let Endpoint::CreateBucket {} = endpoint {
-			return handle_create_bucket(
-				&garage,
-				req,
-				content_sha256,
-				&api_key.key_id,
-				bucket_name,
-			)
-			.await;
+			return handle_create_bucket(&garage, req, &api_key.key_id, bucket_name).await;
 		}
 
 		let bucket_id = garage
 			.bucket_helper()
 			.resolve_bucket(&bucket_name, &api_key)
-			.await?;
+			.await
+			.map_err(pass_helper_error)?;
 		let bucket = garage
 			.bucket_helper()
 			.get_existing_bucket(bucket_id)
@@ -181,7 +174,7 @@ impl ApiHandler for S3ApiServer {
 		let resp = match endpoint {
 			Endpoint::HeadObject {
 				key, part_number, ..
-			} => handle_head(ctx, &req, &key, part_number).await,
+			} => handle_head(ctx, &req.map(|_| ()), &key, part_number).await,
 			Endpoint::GetObject {
 				key,
 				part_number,
@@ -201,20 +194,20 @@ impl ApiHandler for S3ApiServer {
 					response_content_type,
 					response_expires,
 				};
-				handle_get(ctx, &req, &key, part_number, overrides).await
+				handle_get(ctx, &req.map(|_| ()), &key, part_number, overrides).await
 			}
 			Endpoint::UploadPart {
 				key,
 				part_number,
 				upload_id,
-			} => handle_put_part(ctx, req, &key, part_number, &upload_id, content_sha256).await,
+			} => handle_put_part(ctx, req, &key, part_number, &upload_id).await,
 			Endpoint::CopyObject { key } => handle_copy(ctx, &req, &key).await,
 			Endpoint::UploadPartCopy {
 				key,
 				part_number,
 				upload_id,
 			} => handle_upload_part_copy(ctx, &req, &key, part_number, &upload_id).await,
-			Endpoint::PutObject { key } => handle_put(ctx, req, &key, content_sha256).await,
+			Endpoint::PutObject { key } => handle_put(ctx, req, &key).await,
 			Endpoint::AbortMultipartUpload { key, upload_id } => {
 				handle_abort_multipart_upload(ctx, &key, &upload_id).await
 			}
@@ -223,7 +216,7 @@ impl ApiHandler for S3ApiServer {
 				handle_create_multipart_upload(ctx, &req, &key).await
 			}
 			Endpoint::CompleteMultipartUpload { key, upload_id } => {
-				handle_complete_multipart_upload(ctx, req, &key, &upload_id, content_sha256).await
+				handle_complete_multipart_upload(ctx, req, &key, &upload_id).await
 			}
 			Endpoint::CreateBucket {} => unreachable!(),
 			Endpoint::HeadBucket {} => {
@@ -319,7 +312,6 @@ impl ApiHandler for S3ApiServer {
 			} => {
 				let query = ListPartsQuery {
 					bucket_name: ctx.bucket_name.clone(),
-					bucket_id,
 					key,
 					upload_id,
 					part_number_marker: part_number_marker.map(|p| p.min(10000)),
@@ -327,17 +319,15 @@ impl ApiHandler for S3ApiServer {
 				};
 				handle_list_parts(ctx, req, &query).await
 			}
-			Endpoint::DeleteObjects {} => handle_delete_objects(ctx, req, content_sha256).await,
+			Endpoint::DeleteObjects {} => handle_delete_objects(ctx, req).await,
 			Endpoint::GetBucketWebsite {} => handle_get_website(ctx).await,
-			Endpoint::PutBucketWebsite {} => handle_put_website(ctx, req, content_sha256).await,
+			Endpoint::PutBucketWebsite {} => handle_put_website(ctx, req).await,
 			Endpoint::DeleteBucketWebsite {} => handle_delete_website(ctx).await,
 			Endpoint::GetBucketCors {} => handle_get_cors(ctx).await,
-			Endpoint::PutBucketCors {} => handle_put_cors(ctx, req, content_sha256).await,
+			Endpoint::PutBucketCors {} => handle_put_cors(ctx, req).await,
 			Endpoint::DeleteBucketCors {} => handle_delete_cors(ctx).await,
 			Endpoint::GetBucketLifecycleConfiguration {} => handle_get_lifecycle(ctx).await,
-			Endpoint::PutBucketLifecycleConfiguration {} => {
-				handle_put_lifecycle(ctx, req, content_sha256).await
-			}
+			Endpoint::PutBucketLifecycleConfiguration {} => handle_put_lifecycle(ctx, req).await,
 			Endpoint::DeleteBucketLifecycle {} => handle_delete_lifecycle(ctx).await,
 			endpoint => Err(Error::NotImplemented(endpoint.name().to_owned())),
 		};

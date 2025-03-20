@@ -132,7 +132,7 @@ docker run \
   -v /etc/garage.toml:/path/to/garage.toml \
   -v /var/lib/garage/meta:/path/to/garage/meta \
   -v /var/lib/garage/data:/path/to/garage/data \
-  dxflrs/garage:v0.9.4
+  dxflrs/garage:v1.1.0
 ```
 
 Under Linux, you can substitute `--network host` for `-p 3900:3900 -p 3901:3901 -p 3902:3902 -p 3903:3903`
@@ -349,7 +349,7 @@ Check [our s3 compatibility list](@/documentation/reference-manual/s3-compatibil
 
 ### Other tools for interacting with Garage
 
-The following tools can also be used to send and recieve files from/to Garage:
+The following tools can also be used to send and receive files from/to Garage:
 
 - [minio-client](@/documentation/connect/cli.md#minio-client) 
 - [s3cmd](@/documentation/connect/cli.md#s3cmd) 

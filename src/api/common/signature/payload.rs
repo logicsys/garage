@@ -13,23 +13,9 @@ use garage_util::data::Hash;
 use garage_model::garage::Garage;
 use garage_model::key_table::*;
 
-use super::LONG_DATETIME;
-use super::{compute_scope, signing_hmac};
+use super::*;
 
 use crate::encoding::uri_encode;
-use crate::signature::error::*;
-
-pub const X_AMZ_ALGORITHM: HeaderName = HeaderName::from_static("x-amz-algorithm");
-pub const X_AMZ_CREDENTIAL: HeaderName = HeaderName::from_static("x-amz-credential");
-pub const X_AMZ_DATE: HeaderName = HeaderName::from_static("x-amz-date");
-pub const X_AMZ_EXPIRES: HeaderName = HeaderName::from_static("x-amz-expires");
-pub const X_AMZ_SIGNEDHEADERS: HeaderName = HeaderName::from_static("x-amz-signedheaders");
-pub const X_AMZ_SIGNATURE: HeaderName = HeaderName::from_static("x-amz-signature");
-pub const X_AMZ_CONTENT_SH256: HeaderName = HeaderName::from_static("x-amz-content-sha256");
-
-pub const AWS4_HMAC_SHA256: &str = "AWS4-HMAC-SHA256";
-pub const UNSIGNED_PAYLOAD: &str = "UNSIGNED-PAYLOAD";
-pub const STREAMING_AWS4_HMAC_SHA256_PAYLOAD: &str = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
 
 pub type QueryMap = HeaderMap<QueryValue>;
 pub struct QueryValue {
@@ -39,16 +25,23 @@ pub struct QueryValue {
 	value: String,
 }
 
+#[derive(Debug)]
+pub struct CheckedSignature {
+	pub key: Option<Key>,
+	pub content_sha256_header: ContentSha256Header,
+	pub signature_header: Option<String>,
+}
+
 pub async fn check_payload_signature(
 	garage: &Garage,
 	request: &mut Request<IncomingBody>,
 	service: &'static str,
-) -> Result<(Option<Key>, Option<Hash>), Error> {
+) -> Result<CheckedSignature, Error> {
 	let query = parse_query_map(request.uri())?;
 
 	if query.contains_key(&X_AMZ_ALGORITHM) {
-		// We check for presigned-URL-style authentification first, because
-		// the browser or someting else could inject an Authorization header
+		// We check for presigned-URL-style authentication first, because
+		// the browser or something else could inject an Authorization header
 		// that is totally unrelated to AWS signatures.
 		check_presigned_signature(garage, service, request, query).await
 	} else if request.headers().contains_key(AUTHORIZATION) {
@@ -57,17 +50,46 @@ pub async fn check_payload_signature(
 		// Unsigned (anonymous) request
 		let content_sha256 = request
 			.headers()
-			.get("x-amz-content-sha256")
-			.filter(|c| c.as_bytes() != UNSIGNED_PAYLOAD.as_bytes());
-		if let Some(content_sha256) = content_sha256 {
-			let sha256 = hex::decode(content_sha256)
-				.ok()
-				.and_then(|bytes| Hash::try_from(&bytes))
-				.ok_or_bad_request("Invalid content sha256 hash")?;
-			Ok((None, Some(sha256)))
+			.get(X_AMZ_CONTENT_SHA256)
+			.map(|x| x.to_str())
+			.transpose()?;
+		Ok(CheckedSignature {
+			key: None,
+			content_sha256_header: parse_x_amz_content_sha256(content_sha256)?,
+			signature_header: None,
+		})
+	}
+}
+
+fn parse_x_amz_content_sha256(header: Option<&str>) -> Result<ContentSha256Header, Error> {
+	let header = match header {
+		Some(x) => x,
+		None => return Ok(ContentSha256Header::UnsignedPayload),
+	};
+	if header == UNSIGNED_PAYLOAD {
+		Ok(ContentSha256Header::UnsignedPayload)
+	} else if let Some(rest) = header.strip_prefix("STREAMING-") {
+		let (trailer, algo) = if let Some(rest2) = rest.strip_suffix("-TRAILER") {
+			(true, rest2)
 		} else {
-			Ok((None, None))
-		}
+			(false, rest)
+		};
+		let signed = match algo {
+			AWS4_HMAC_SHA256_PAYLOAD => true,
+			UNSIGNED_PAYLOAD => false,
+			_ => {
+				return Err(Error::bad_request(
+					"invalid or unsupported x-amz-content-sha256",
+				))
+			}
+		};
+		Ok(ContentSha256Header::StreamingPayload { trailer, signed })
+	} else {
+		let sha256 = hex::decode(header)
+			.ok()
+			.and_then(|bytes| Hash::try_from(&bytes))
+			.ok_or_bad_request("Invalid content sha256 hash")?;
+		Ok(ContentSha256Header::Sha256Checksum(sha256))
 	}
 }
 
@@ -76,7 +98,7 @@ async fn check_standard_signature(
 	service: &'static str,
 	request: &Request<IncomingBody>,
 	query: QueryMap,
-) -> Result<(Option<Key>, Option<Hash>), Error> {
+) -> Result<CheckedSignature, Error> {
 	let authorization = Authorization::parse_header(request.headers())?;
 
 	// Verify that all necessary request headers are included in signed_headers
@@ -108,18 +130,13 @@ async fn check_standard_signature(
 
 	let key = verify_v4(garage, service, &authorization, string_to_sign.as_bytes()).await?;
 
-	let content_sha256 = if authorization.content_sha256 == UNSIGNED_PAYLOAD {
-		None
-	} else if authorization.content_sha256 == STREAMING_AWS4_HMAC_SHA256_PAYLOAD {
-		let bytes = hex::decode(authorization.signature).ok_or_bad_request("Invalid signature")?;
-		Some(Hash::try_from(&bytes).ok_or_bad_request("Invalid signature")?)
-	} else {
-		let bytes = hex::decode(authorization.content_sha256)
-			.ok_or_bad_request("Invalid content sha256 hash")?;
-		Some(Hash::try_from(&bytes).ok_or_bad_request("Invalid content sha256 hash")?)
-	};
+	let content_sha256_header = parse_x_amz_content_sha256(Some(&authorization.content_sha256))?;
 
-	Ok((Some(key), content_sha256))
+	Ok(CheckedSignature {
+		key: Some(key),
+		content_sha256_header,
+		signature_header: Some(authorization.signature),
+	})
 }
 
 async fn check_presigned_signature(
@@ -127,12 +144,12 @@ async fn check_presigned_signature(
 	service: &'static str,
 	request: &mut Request<IncomingBody>,
 	mut query: QueryMap,
-) -> Result<(Option<Key>, Option<Hash>), Error> {
+) -> Result<CheckedSignature, Error> {
 	let algorithm = query.get(&X_AMZ_ALGORITHM).unwrap();
 	let authorization = Authorization::parse_presigned(&algorithm.value, &query)?;
 
 	// Verify that all necessary request headers are included in signed_headers
-	// For AWSv4 pre-signed URLs, the following must be incldued:
+	// For AWSv4 pre-signed URLs, the following must be included:
 	// - the Host header (mandatory)
 	// - all x-amz-* headers used in the request
 	let signed_headers = split_signed_headers(&authorization)?;
@@ -193,7 +210,11 @@ async fn check_presigned_signature(
 
 	// Presigned URLs always use UNSIGNED-PAYLOAD,
 	// so there is no sha256 hash to return.
-	Ok((Some(key), None))
+	Ok(CheckedSignature {
+		key: Some(key),
+		content_sha256_header: ContentSha256Header::UnsignedPayload,
+		signature_header: Some(authorization.signature),
+	})
 }
 
 pub fn parse_query_map(uri: &http::uri::Uri) -> Result<QueryMap, Error> {
@@ -306,7 +327,7 @@ pub fn canonical_request(
 	// Note that there is also the issue of path normalization, which I hope is unrelated to the
 	// one of URI-encoding. At least in aws-sigv4 both parameters can be set independently,
 	// and rusoto_signature does not seem to do any effective path normalization, even though
-	// it mentions it in the comments (same link to the souce code as above).
+	// it mentions it in the comments (same link to the source code as above).
 	// We make the explicit choice of NOT normalizing paths in the K2V API because doing so
 	// would make non-normalized paths invalid K2V partition keys, and we don't want that.
 	let canonical_uri: std::borrow::Cow<str> = if service != "s3" {
@@ -442,7 +463,7 @@ impl Authorization {
 			.to_string();
 
 		let content_sha256 = headers
-			.get(X_AMZ_CONTENT_SH256)
+			.get(X_AMZ_CONTENT_SHA256)
 			.ok_or_bad_request("Missing X-Amz-Content-Sha256 field")?;
 
 		let date = headers
@@ -518,7 +539,7 @@ impl Authorization {
 		})
 	}
 
-	pub(crate) fn parse_form(params: &HeaderMap) -> Result<Self, Error> {
+	pub fn parse_form(params: &HeaderMap) -> Result<Self, Error> {
 		let algorithm = params
 			.get(X_AMZ_ALGORITHM)
 			.ok_or_bad_request("Missing X-Amz-Algorithm header")?
