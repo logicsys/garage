@@ -31,6 +31,7 @@ let
     "aarch64-unknown-linux-musl" = "AARCH64_UNKNOWN_LINUX_MUSL";
     "i686-unknown-linux-musl" = "I686_UNKNOWN_LINUX_MUSL";
     "arm-unknown-linux-musleabihf" = "ARM_UNKNOWN_LINUX_MUSLEABIHF";
+    "x86_64-pc-windows-gnu" = "X86_64_PC_WINDOWS_GNU";
   };
 
   pkgsNative = import nixpkgs {
@@ -106,7 +107,7 @@ let
       "target-feature=+crt-static"
       "link-arg=-static"
     ]; # compile as dynamic with static-pie
-    "x86_64-pc-windows-gnu" = [
+    "x86_64-w64-mingw32" = [
       "target-feature=+crt-static"
       "link-arg=-static-pie"
     ];
@@ -115,6 +116,19 @@ let
   codegenOpts = if target != null then codegenOptsMap.${target} else [
     "link-arg=-fuse-ld=mold"
   ];
+
+  # HACK: work around https://github.com/NixOS/nixpkgs/issues/177129
+  # Though this is an issue between Clang and GCC,
+  # so it may not get fixed anytime soon...
+  empty-libgcc_eh = pkgsNative.stdenv.mkDerivation {
+    pname = "empty-libgcc_eh";
+    version = "0";
+    dontUnpack = true;
+    installPhase = ''
+      mkdir -p "$out"/lib
+      "${pkgsNative.binutils}"/bin/ar r "$out"/lib/libgcc_eh.a
+    '';
+  };
 
   commonArgs =
     {
@@ -134,6 +148,11 @@ let
         pkgs.mold
       ];
 
+      buildInputs = lib.optionals targetIsWindows [
+        empty-libgcc_eh
+        pkgs.windows.pthreads
+      ];
+
       CARGO_PROFILE = if release then "release" else "dev";
       CARGO_BUILD_RUSTFLAGS =
         lib.concatStringsSep
@@ -150,7 +169,14 @@ let
       TARGET_CC = "${stdenv.cc.targetPrefix}cc";
     } else {
       CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER = "clang";
-    });
+    })
+  //
+    (if targetIsWindows then {
+      # libsodium-sys doesn't consider windows-gnu to be a "supported" build
+      # target, even though libsodium itself releases official mingw builds. Use
+      # nix's own libsodium, via a special envvar, instead.
+      SODIUM_LIB_DIR = "${pkgs.libsodium}/lib";
+    } else {});
 
 in rec {
   toolchain = toolchainFn pkgs;
