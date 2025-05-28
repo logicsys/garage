@@ -215,6 +215,13 @@ pub async fn handle_head_without_ctx(
 					.get(&object_version.uuid, &EmptyKey)
 					.await?
 					.ok_or(Error::NoSuchKey)?;
+				if version.deleted.get() {
+					// the version was deleted between when the object_table was consulted
+					// and now, this could mean the object was deleted, or overriden.
+					// Rather than say the key doesn't exist, return a transient error
+					// to signal the client to try again.
+					return Err(Error::Internal);
+				}
 
 				let (part_offset, part_end) =
 					calculate_part_bounds(&version, pn).ok_or(Error::InvalidPart)?;
@@ -431,6 +438,13 @@ pub fn full_object_byte_stream(
 						.ok_or_message("channel closed")?;
 
 					let version = version_fut.await.unwrap()?.ok_or(Error::NoSuchKey)?;
+					if version.deleted.get() {
+						// the version was deleted between when the object_table was consulted
+						// and now, this could mean the object was deleted, or overriden.
+						// Rather than say the key doesn't exist
+						// it's too late to return a proper error, but
+						return Err(Error::Internal);
+					}
 					for (i, (_, vb)) in version.blocks.items().iter().enumerate().skip(1) {
 						let stream_block_i = encryption
 							.get_block(&garage, &vb.hash, Some(order_stream.order(i as u64)))
@@ -446,6 +460,14 @@ pub fn full_object_byte_stream(
 				{
 					Ok(()) => (),
 					Err(e) => {
+						// TODO i think this is a bad idea, we should log
+						// an error and stop there. If the error happens to
+						// be exactly the size of what hasn't been streamed
+						// yet, the client will see the request as a
+						// success
+						// instead truncating the output notify the client
+						// something happened with their download, so that
+						// they can retry it
 						let _ = tx.send(error_stream_item(e)).await;
 					}
 				}
@@ -497,7 +519,13 @@ async fn handle_get_range(
 				.get(&version.uuid, &EmptyKey)
 				.await?
 				.ok_or(Error::NoSuchKey)?;
-
+			if version.deleted.get() {
+				// the version was deleted between when the object_table was consulted
+				// and now, this could mean the object was deleted, or overriden.
+				// Rather than say the key doesn't exist, return a transient error
+				// to signal the client to try again.
+				return Err(Error::Internal);
+			}
 			let body =
 				body_from_blocks_range(garage, encryption, version.blocks.items(), begin, end);
 			Ok(resp_builder.body(body)?)
@@ -547,6 +575,14 @@ async fn handle_get_part(
 				.get(&object_version.uuid, &EmptyKey)
 				.await?
 				.ok_or(Error::NoSuchKey)?;
+
+			if version.deleted.get() {
+				// the version was deleted between when the object_table was consulted
+				// and now, this could mean the object was deleted, or overriden.
+				// Rather than say the key doesn't exist, return a transient error
+				// to signal the client to try again.
+				return Err(Error::Internal);
+			}
 
 			let (begin, end) =
 				calculate_part_bounds(&version, part_number).ok_or(Error::InvalidPart)?;

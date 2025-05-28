@@ -237,6 +237,13 @@ async fn handle_copy_metaonly(
 				.get(&source_version.uuid, &EmptyKey)
 				.await?;
 			let source_version = source_version.ok_or(Error::NoSuchKey)?;
+			if source_version.deleted.get() {
+				// the version was deleted between when the object_table was consulted
+				// and now, this could mean the object was deleted, or overriden.
+				// Rather than say the key doesn't exist, return a transient error
+				// to signal the client to try again.
+				return Err(Error::Internal);
+			}
 
 			// Write an "uploading" marker in Object table
 			// This holds a reference to the object in the Version table
@@ -428,6 +435,13 @@ pub async fn handle_upload_part_copy(
 		.get(&source_object_version.uuid, &EmptyKey)
 		.await?
 		.ok_or(Error::NoSuchKey)?;
+	if source_version.deleted.get() {
+		// the version was deleted between when the object_table was consulted
+		// and now, this could mean the object was deleted, or overriden.
+		// Rather than say the key doesn't exist, return a transient error
+		// to signal the client to try again.
+		return Err(Error::Internal);
+	}
 
 	// We want to reuse blocks from the source version as much as possible.
 	// However, we still need to get the data from these blocks
