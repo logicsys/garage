@@ -215,13 +215,7 @@ pub async fn handle_head_without_ctx(
 					.get(&object_version.uuid, &EmptyKey)
 					.await?
 					.ok_or(Error::NoSuchKey)?;
-				if version.deleted.get() {
-					// the version was deleted between when the object_table was consulted
-					// and now, this could mean the object was deleted, or overriden.
-					// Rather than say the key doesn't exist, return a transient error
-					// to signal the client to try again.
-					return Err(Error::Internal);
-				}
+				check_version_not_deleted(&version)?;
 
 				let (part_offset, part_end) =
 					calculate_part_bounds(&version, pn).ok_or(Error::InvalidPart)?;
@@ -372,6 +366,17 @@ pub async fn handle_get_without_ctx(
 	}
 }
 
+pub(crate) fn check_version_not_deleted(version: &Version) -> Result<(), Error> {
+	if version.deleted.get() {
+		// the version was deleted between when the object_table was consulted
+		// and now, this could mean the object was deleted, or overriden.
+		// Rather than say the key doesn't exist, return a transient error
+		// to signal the client to try again.
+		return Err(Error::Internal);
+	}
+	Ok(())
+}
+
 async fn handle_get_full(
 	garage: Arc<Garage>,
 	version: &ObjectVersion,
@@ -438,13 +443,7 @@ pub fn full_object_byte_stream(
 						.ok_or_message("channel closed")?;
 
 					let version = version_fut.await.unwrap()?.ok_or(Error::NoSuchKey)?;
-					if version.deleted.get() {
-						// the version was deleted between when the object_table was consulted
-						// and now, this could mean the object was deleted, or overriden.
-						// Rather than say the key doesn't exist
-						// it's too late to return a proper error, but
-						return Err(Error::Internal);
-					}
+					check_version_not_deleted(&version)?;
 					for (i, (_, vb)) in version.blocks.items().iter().enumerate().skip(1) {
 						let stream_block_i = encryption
 							.get_block(&garage, &vb.hash, Some(order_stream.order(i as u64)))
@@ -519,13 +518,7 @@ async fn handle_get_range(
 				.get(&version.uuid, &EmptyKey)
 				.await?
 				.ok_or(Error::NoSuchKey)?;
-			if version.deleted.get() {
-				// the version was deleted between when the object_table was consulted
-				// and now, this could mean the object was deleted, or overriden.
-				// Rather than say the key doesn't exist, return a transient error
-				// to signal the client to try again.
-				return Err(Error::Internal);
-			}
+			check_version_not_deleted(&version)?;
 			let body =
 				body_from_blocks_range(garage, encryption, version.blocks.items(), begin, end);
 			Ok(resp_builder.body(body)?)
@@ -576,13 +569,7 @@ async fn handle_get_part(
 				.await?
 				.ok_or(Error::NoSuchKey)?;
 
-			if version.deleted.get() {
-				// the version was deleted between when the object_table was consulted
-				// and now, this could mean the object was deleted, or overriden.
-				// Rather than say the key doesn't exist, return a transient error
-				// to signal the client to try again.
-				return Err(Error::Internal);
-			}
+			check_version_not_deleted(&version)?;
 
 			let (begin, end) =
 				calculate_part_bounds(&version, part_number).ok_or(Error::InvalidPart)?;
