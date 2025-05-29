@@ -87,10 +87,6 @@ pub enum Error {
 	/// The client sent a request for an action not supported by garage
 	#[error(display = "Unimplemented action: {}", _0)]
 	NotImplemented(String),
-
-	/// An internal, usually transient, error happened
-	#[error(display = "Please try again.")]
-	Internal,
 }
 
 commonErrorDerivative!(Error);
@@ -151,7 +147,6 @@ impl Error {
 			Error::InvalidDigest(_) => "InvalidDigest",
 			Error::InvalidUtf8Str(_) | Error::InvalidUtf8String(_) => "InvalidRequest",
 			Error::InvalidEncryptionAlgorithm(_) => "InvalidEncryptionAlgorithmError",
-			Error::Internal => "InternalError",
 		}
 	}
 }
@@ -174,7 +169,6 @@ impl ApiError for Error {
 			| Error::InvalidXml(_)
 			| Error::InvalidUtf8Str(_)
 			| Error::InvalidUtf8String(_) => StatusCode::BAD_REQUEST,
-			Error::Internal => StatusCode::INTERNAL_SERVER_ERROR,
 		}
 	}
 
