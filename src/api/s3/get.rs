@@ -19,12 +19,13 @@ use garage_net::stream::ByteStream;
 use garage_rpc::rpc_helper::OrderTag;
 use garage_table::EmptyKey;
 use garage_util::data::*;
-use garage_util::error::OkOrMessage;
+use garage_util::error::{Error as UtilError, OkOrMessage};
 
 use garage_model::garage::Garage;
 use garage_model::s3::object_table::*;
 use garage_model::s3::version_table::*;
 
+use garage_api_common::common_error::CommonError;
 use garage_api_common::helpers::*;
 use garage_api_common::signature::checksum::{add_checksum_response_headers, X_AMZ_CHECKSUM_MODE};
 
@@ -372,7 +373,11 @@ pub(crate) fn check_version_not_deleted(version: &Version) -> Result<(), Error> 
 		// and now, this could mean the object was deleted, or overriden.
 		// Rather than say the key doesn't exist, return a transient error
 		// to signal the client to try again.
-		return Err(Error::Internal);
+		return Err(CommonError::InternalError(UtilError::Message(
+			"conflict/inconsistency between object and version state, version is deleted"
+				.to_string(),
+		))
+		.into());
 	}
 	Ok(())
 }
