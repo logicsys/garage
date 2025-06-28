@@ -393,7 +393,7 @@ fn UpdateKey() -> () {}
     tag = "Access key",
     description = "Delete a key from the cluster. Its access will be removed from all the buckets. Buckets are not automatically deleted and can be dangling. You should manually delete them before. ",
     params(
-        ("id" = String, description = "Access key ID"),
+        ("id" = String, Query, description = "Access key ID"),
     ),
 	responses(
             (status = 200, description = "Access key has been deleted"),
@@ -466,7 +466,7 @@ to remove the quotas. An absent value will be considered the same as a `null`. I
 to change only one of the two quotas.
     ",
     params(
-        ("id" = String, description = "ID of the bucket to update"),
+        ("id" = String, Query, description = "ID of the bucket to update"),
     ),
     request_body = UpdateBucketRequestBody,
 	responses(

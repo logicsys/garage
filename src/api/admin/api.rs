@@ -881,7 +881,8 @@ pub struct CreateBucketLocalAlias {
 
 // ---- UpdateBucket ----
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct UpdateBucketRequest {
 	pub id: String,
 	pub body: UpdateBucketRequestBody,

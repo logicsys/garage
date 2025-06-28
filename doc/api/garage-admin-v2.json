@@ -505,7 +505,7 @@
         "parameters": [
           {
             "name": "id",
-            "in": "path",
+            "in": "query",
             "description": "Access key ID",
             "required": true,
             "schema": {
@@ -1577,7 +1577,7 @@
         "parameters": [
           {
             "name": "id",
-            "in": "path",
+            "in": "query",
             "description": "ID of the bucket to update",
             "required": true,
             "schema": {
