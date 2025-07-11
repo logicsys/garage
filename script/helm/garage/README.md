@@ -54,9 +54,6 @@ S3-compatible object store for small self-hosted geo-distributed deployments
 | ingress.s3.web.hosts[1] | object | `{"host":"mywebpage.example.com","paths":[{"path":"/","pathType":"Prefix"}]}` | specific bucket access with FQDN bucket |
 | ingress.s3.web.labels | object | `{}` |  |
 | ingress.s3.web.tls | list | `[]` |  |
-| initImage.pullPolicy | string | `"IfNotPresent"` |  |
-| initImage.repository | string | `"busybox"` |  |
-| initImage.tag | string | `"stable"` |  |
 | livenessProbe | object | `{}` | Specifies a livenessProbe |
 | monitoring.metrics.enabled | bool | `false` | If true, a service for monitoring is created with a prometheus.io/scrape annotation |
 | monitoring.metrics.serviceMonitor.enabled | bool | `false` | If true, a ServiceMonitor CRD is created for a prometheus operator https://github.com/coreos/prometheus-operator |

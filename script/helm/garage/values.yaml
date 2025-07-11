@@ -86,11 +86,6 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
-initImage:
-  repository: busybox
-  tag: stable
-  pullPolicy: IfNotPresent
-
 # -- set if you need credentials to pull your custom image
 imagePullSecrets: []
 nameOverride: ""
