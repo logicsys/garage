@@ -17,6 +17,8 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/config-tlsproxy: {{ include (print $.Template.BasePath "/configmap-tlsproxy.yaml") . | sha256sum }}
+        kubectl.kubernetes.io/default-container: {{ .Chart.Name }}
       {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -31,6 +33,40 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
+        {{- if .Values.tlsproxy.enabled }}
+        - name: tlsproxy
+          securityContext:
+            {{- toYaml .Values.tlsproxy.securityContext | nindent 12 }}
+          image: "{{ .Values.tlsproxy.image.repository }}:{{ .Values.tlsproxy.image.tag }}"
+          imagePullPolicy: {{ .Values.tlsproxy.image.pullPolicy }}
+          ports:
+            - containerPort: 3910
+              name: s3-tlsproxy
+            - containerPort: 3912
+              name: web-tlsproxy
+            - containerPort: 3913
+              name: admin-tlsproxy
+          volumeMounts:
+            - name: secret-tlsproxy
+              mountPath: /etc/tlsproxy
+            - name: tmp-tlsproxy
+              mountPath: /tmp
+            - name: configmap-tlsproxy
+              mountPath: /etc/nginx/conf.d
+          {{- with .Values.tlsproxy.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tlsproxy.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tlsproxy.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.tlsproxy.resources | nindent 12 }}
+        {{- end }}
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
@@ -77,6 +113,16 @@ spec:
         - name: configmap
           configMap:
             name: {{ include "garage.fullname" . }}-config
+        {{- if .Values.tlsproxy.enabled }}
+        - name: configmap-tlsproxy
+          configMap:
+            name: {{ include "garage.fullname" . }}-config-tlsproxy
+        - name: secret-tlsproxy
+          secret:
+            secretName: {{ include "garage.fullname" . }}-tlsproxy
+        - name: tmp-tlsproxy
+          emptyDir: {}
+        {{- end }}
         {{- if .Values.persistence.enabled }}
         {{- if eq .Values.deployment.kind "DaemonSet" }}
         - name: meta

@@ -129,6 +129,36 @@ service:
     web:
       port: 3902
     # NOTE: the admin API is excluded for now as it is not consistent across nodes
+    #
+tlsproxy:
+  enabled: false
+
+  annotations: {}
+
+  config:
+    http:
+       # Defaults to 1MB. If the upload is larger, the request is denied with 413.
+       # 0 disables checking
+       # https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size
+       client_max_body_size: 0
+
+       # Defaults to 16k on 64-bit. Any upload larger than this limit will create a
+       # tempfile in /tmp/client_temp
+       # https://nginx.org/en/docs/http/ngx_http_core_module.html#client_body_buffer_size
+       client_body_buffer_size: 256k
+
+  image:
+    repository: docker.io/nginxinc/nginx-unprivileged
+    tag: 1-alpine-perl
+    pullPolicy: IfNotPresent
+
+  securityContext:
+    # -- The default security context is heavily restricted,
+    # feel free to tune it to your requirements
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
 
 ingress:
   s3:
