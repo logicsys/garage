@@ -32,8 +32,10 @@ S3-compatible object store for small self-hosted geo-distributed deployments
 | garage.replicationFactor | string | `"3"` | Default to 3 replicas, see the replication_factor section at https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#replication_factor |
 | garage.consistencyMode | string | `"consistent"` | Default to read-after-write consistency, see the consistency_mode section at https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#consistency_mode |
 | garage.metadataAutoSnapshotInterval | string | `""` | If this value is set, Garage will automatically take a snapshot of the metadata DB file at a regular interval and save it in the metadata directory. https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#metadata_auto_snapshot_interval |
-| garage.rpcBindAddr | string | `"[::]:3901"` |  |
-| garage.rpcSecret | string | `""` | If not given, a random secret will be generated and stored in a Secret object |
+| garage.rpc.bindAddr | string | `"[::]:3901"` |  |
+| garage.rpc.secret.value | string | `""` | If not given, a random secret will be generated and stored in a Secret object |
+| garage.rpc.create | bool | `true` | If not overridden, define if a secret should be created by helm |
+| garage.rpc.secret.name | string | `""` | If you want to use a pre-existing secret, set the name here it should contain the rpcSecret key with the value and don't forget to put rpc.secret.create to false |
 | garage.s3.api.region | string | `"garage"` |  |
 | garage.s3.api.rootDomain | string | `".s3.garage.tld"` |  |
 | garage.s3.web.index | string | `"index.html"` |  |
@@ -54,9 +56,6 @@ S3-compatible object store for small self-hosted geo-distributed deployments
 | ingress.s3.web.hosts[1] | object | `{"host":"mywebpage.example.com","paths":[{"path":"/","pathType":"Prefix"}]}` | specific bucket access with FQDN bucket |
 | ingress.s3.web.labels | object | `{}` |  |
 | ingress.s3.web.tls | list | `[]` |  |
-| initImage.pullPolicy | string | `"IfNotPresent"` |  |
-| initImage.repository | string | `"busybox"` |  |
-| initImage.tag | string | `"stable"` |  |
 | livenessProbe | object | `{}` | Specifies a livenessProbe |
 | monitoring.metrics.enabled | bool | `false` | If true, a service for monitoring is created with a prometheus.io/scrape annotation |
 | monitoring.metrics.serviceMonitor.enabled | bool | `false` | If true, a ServiceMonitor CRD is created for a prometheus operator https://github.com/coreos/prometheus-operator |
