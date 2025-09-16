@@ -110,7 +110,9 @@ spec:
       {{- end }}
   {{- if and .Values.persistence.enabled (eq .Values.deployment.kind "StatefulSet") }}
   volumeClaimTemplates:
-  - metadata:
+  - apiVersion: v1	
+    kind: PersistentVolumeClaim
+    metadata:
       name: meta
     spec:
       accessModes: [ "ReadWriteOnce" ]
@@ -120,7 +122,9 @@ spec:
       resources:
         requests:
           storage: {{ .Values.persistence.meta.size | quote }}
-  - metadata:
+  - apiVersion: v1	
+    kind: PersistentVolumeClaim
+    metadata:
       name: data
     spec:
       accessModes: [ "ReadWriteOnce" ]
