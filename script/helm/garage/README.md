@@ -15,7 +15,7 @@ S3-compatible object store for small self-hosted geo-distributed deployments
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
-| commonLabels  | object | `{}` | Extra labels for all resources |
+| commonLabels | object | `{}` | Additional labels to add to all resources created by this chart |
 | deployment.kind | string | `"StatefulSet"` | Switchable to DaemonSet |
 | deployment.podManagementPolicy | string | `"OrderedReady"` | If using statefulset, allow Parallel or OrderedReady (default) |
 | deployment.replicaCount | int | `3` | Number of StatefulSet replicas/garage nodes to start |
@@ -26,13 +26,14 @@ S3-compatible object store for small self-hosted geo-distributed deployments
 | garage.blockSize | string | `"1048576"` | Defaults is 1MB An increase can result in better performance in certain scenarios https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#block_size |
 | garage.bootstrapPeers | list | `[]` | This is not required if you use the integrated kubernetes discovery |
 | garage.compressionLevel | string | `"1"` | zstd compression level of stored blocks https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#compression_level |
+| garage.consistencyMode | string | `"consistent"` | By default, enable read-after-write consistency guarantees, see the consistency_mode section at https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#consistency_mode |
 | garage.dbEngine | string | `"lmdb"` | Can be changed for better performance on certain systems https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#db_engine |
 | garage.existingConfigMap | string | `""` | if not empty string, allow using an existing ConfigMap for the garage.toml, if set, ignores garage.toml |
+| garage.existingRpcSecret | string | `""` | If not empty, an existing kubernetes secret will be used for the rpc secret instead of generating one. If set ignores rpcSecret value |
 | garage.garageTomlString | string | `""` | String Template for the garage configuration if set, ignores above values. Values can be templated, see https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/ |
 | garage.kubernetesSkipCrd | bool | `false` | Set to true if you want to use k8s discovery but install the CRDs manually outside of the helm chart, for example if you operate at namespace level without cluster ressources |
-| garage.replicationFactor | string | `"3"` | Default to 3 replicas, see the replication_factor section at https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#replication_factor |
-| garage.consistencyMode | string | `"consistent"` | Default to read-after-write consistency, see the consistency_mode section at https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#consistency_mode |
 | garage.metadataAutoSnapshotInterval | string | `""` | If this value is set, Garage will automatically take a snapshot of the metadata DB file at a regular interval and save it in the metadata directory. https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#metadata_auto_snapshot_interval |
+| garage.replicationFactor | string | `"3"` | Default to 3 replicas, see the replication_factor section at https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#replication_factor |
 | garage.rpcBindAddr | string | `"[::]:3901"` |  |
 | garage.rpcSecret | string | `""` | If not given, a random secret will be generated and stored in a Secret object |
 | garage.s3.api.region | string | `"garage"` |  |
@@ -78,6 +79,7 @@ S3-compatible object store for small self-hosted geo-distributed deployments
 | persistence.meta.size | string | `"100Mi"` |  |
 | podAnnotations | object | `{}` | additonal pod annotations |
 | podSecurityContext.fsGroup | int | `1000` |  |
+| podSecurityContext.fsGroupChangePolicy | string | `"OnRootMismatch"` |  |
 | podSecurityContext.runAsGroup | int | `1000` |  |
 | podSecurityContext.runAsNonRoot | bool | `true` |  |
 | podSecurityContext.runAsUser | int | `1000` |  |

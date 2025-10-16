@@ -37,6 +37,9 @@ garage:
   rpcBindAddr: "[::]:3901"
   # -- If not given, a random secret will be generated and stored in a Secret object
   rpcSecret: ""
+  # -- If not empty, an existing kubernetes secret will be used for the rpc secret instead of generating one.
+  # If set ignores rpcSecret value
+  existingRpcSecret: ""
   # -- This is not required if you use the integrated kubernetes discovery
   bootstrapPeers: []
   # -- Set to true if you want to use k8s discovery but install the CRDs manually outside
@@ -181,16 +184,16 @@ ingress:
         # kubernetes.io/tls-acme: "true"
       labels: {}
       hosts:
-      # --  wildcard website access with bucket name prefix
-       - host: "*.web.garage.tld"
-         paths:
-           - path: /
-             pathType: Prefix
-       # -- specific bucket access with FQDN bucket
-       - host: "mywebpage.example.com"
-         paths:
-           - path: /
-             pathType: Prefix
+        # --  wildcard website access with bucket name prefix
+        - host: "*.web.garage.tld"
+          paths:
+            - path: /
+              pathType: Prefix
+        # -- specific bucket access with FQDN bucket
+        - host: "mywebpage.example.com"
+          paths:
+            - path: /
+              pathType: Prefix
       tls: []
       #  - secretName: my-garage-cluster-tls
       #    hosts:
