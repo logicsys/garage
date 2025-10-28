@@ -1,6 +1,6 @@
 [package]
 name = "garage"
-version = "2.0.0"
+version = "2.1.0"
 authors = ["Alex Auvolat <alex@adnab.me>"]
 edition = "2018"
 license = "AGPL-3.0"
@@ -93,6 +93,7 @@ k2v = [ "garage_util/k2v", "garage_api_k2v", "garage_api_admin/k2v" ]
 # Database engines
 lmdb = [ "garage_model/lmdb" ]
 sqlite = [ "garage_model/sqlite" ]
+fjall = [ "garage_model/fjall" ]
 
 # Automatic registration and discovery via Consul API
 consul-discovery = [ "garage_rpc/consul-discovery" ]

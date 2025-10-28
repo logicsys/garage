@@ -23,7 +23,6 @@ use garage_util::time::now_msec;
 use garage_api_common::generic_server::*;
 use garage_api_common::helpers::*;
 
-use crate::api::AdminApiRequest::GetCurrentAdminTokenInfo;
 use crate::api::*;
 use crate::error::*;
 use crate::router_v0;
@@ -218,6 +217,13 @@ impl ApiHandler for ArcAdminApiServer {
 	) -> Result<Response<ResBody>, Error> {
 		self.0.handle_http_api(req, endpoint).await
 	}
+
+	fn key_id_from_request(&self, req: &Request<IncomingBody>) -> Option<String> {
+		let auth_header = req.headers().get(AUTHORIZATION)?;
+		let token = parse_authorization(auth_header).ok()?;
+		let key_id = token.split_once('.')?.0;
+		Some(key_id.to_string())
+	}
 }
 
 impl ApiEndpoint for HttpEndpoint {
@@ -245,6 +251,15 @@ fn hash_bearer_token(token: &str) -> String {
 		.to_string()
 }
 
+fn parse_authorization(auth_header: &hyper::http::HeaderValue) -> Result<&str, Error> {
+	let token = auth_header
+		.to_str()?
+		.strip_prefix("Bearer ")
+		.ok_or_else(|| Error::forbidden("Invalid Authorization header"))?
+		.trim();
+	Ok(token)
+}
+
 fn verify_authorization(
 	garage: &Garage,
 	global_token_hash: Option<&str>,
@@ -261,11 +276,7 @@ fn verify_authorization(
 				"Bearer token must be provided in Authorization header",
 			))
 		}
-		Some(authorization) => authorization
-			.to_str()?
-			.strip_prefix("Bearer ")
-			.ok_or_else(|| Error::forbidden("Invalid Authorization header"))?
-			.trim(),
+		Some(authorization) => parse_authorization(authorization)?,
 	};
 
 	let token_hash_string = if let Some((prefix, _)) = token.split_once('.') {
@@ -295,38 +306,36 @@ fn verify_authorization(
 }
 
 pub(crate) fn find_matching_nodes(garage: &Garage, spec: &str) -> Result<Vec<Uuid>, Error> {
-	let mut res = vec![];
-	if spec == "*" {
-		res = garage.system.cluster_layout().all_nodes().to_vec();
+	if spec == "self" {
+		Ok(vec![garage.system.id])
+	} else {
+		// Collect all nodes currently up and/or in cluster layout
+		let mut res = vec![];
+		if let Ok(all_nodes) = garage.system.cluster_layout().all_nodes() {
+			res = all_nodes.to_vec();
+		}
 		for node in garage.system.get_known_nodes() {
 			if node.is_up && !res.contains(&node.id) {
 				res.push(node.id);
 			}
 		}
-	} else if spec == "self" {
-		res.push(garage.system.id);
-	} else {
-		let layout = garage.system.cluster_layout();
-		let known_nodes = garage.system.get_known_nodes();
-		let all_nodes = layout
-			.all_nodes()
-			.iter()
-			.copied()
-			.chain(known_nodes.iter().filter(|x| x.is_up).map(|x| x.id));
-		for node in all_nodes {
-			if !res.contains(&node) && hex::encode(node).starts_with(spec) {
-				res.push(node);
+
+		if spec == "*" {
+			// match all nodes
+			Ok(res)
+		} else {
+			// filter nodes that match spec
+			res.retain(|node| hex::encode(node).starts_with(spec));
+			if res.is_empty() {
+				Err(Error::bad_request(format!("No nodes matching {}", spec)))
+			} else if res.len() > 1 {
+				Err(Error::bad_request(format!(
+					"Multiple nodes matching {}: {:?}",
+					spec, res
+				)))
+			} else {
+				Ok(res)
 			}
 		}
-		if res.is_empty() {
-			return Err(Error::bad_request(format!("No nodes matching {}", spec)));
-		}
-		if res.len() > 1 {
-			return Err(Error::bad_request(format!(
-				"Multiple nodes matching {}: {:?}",
-				spec, res
-			)));
-		}
 	}
-	Ok(res)
 }

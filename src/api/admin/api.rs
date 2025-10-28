@@ -12,7 +12,7 @@ use garage_rpc::*;
 
 use garage_model::garage::Garage;
 
-use garage_api_common::helpers::is_default;
+use garage_api_common::{common_error::CommonError, helpers::is_default};
 
 use crate::api_server::{find_matching_nodes, AdminRpc, AdminRpcResponse};
 use crate::error::Error;
@@ -145,6 +145,13 @@ pub struct MultiResponse<RB> {
 	pub error: HashMap<String, String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct MultiRequestQueryParams {
+	/// Node ID to query, or `*` for all nodes, or `self` for the node responding to the request
+	pub node: String,
+}
+
 // **********************************************
 //      Special endpoints
 //
@@ -155,8 +162,10 @@ pub struct MultiResponse<RB> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OptionsRequest;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct CheckDomainRequest {
+	/// The domain name to check for
 	pub domain: String,
 }
 
@@ -258,7 +267,7 @@ pub struct GetClusterHealthResponse {
 	/// the number of storage nodes currently registered in the cluster layout
 	pub storage_nodes: usize,
 	/// the number of storage nodes to which a connection is currently open
-	pub storage_nodes_ok: usize,
+	pub storage_nodes_up: usize,
 	/// the total number of partitions of the data (currently always 256)
 	pub partitions: usize,
 	/// the number of partitions for which a quorum of write nodes is available
@@ -355,9 +364,12 @@ pub struct CreateAdminTokenResponse {
 
 // ---- UpdateAdminToken ----
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct UpdateAdminTokenRequest {
+	/// Admin API token ID
 	pub id: String,
+	#[param(ignore = true)]
 	pub body: UpdateAdminTokenRequestBody,
 }
 
@@ -384,8 +396,10 @@ pub struct UpdateAdminTokenResponse(pub GetAdminTokenInfoResponse);
 
 // ---- DeleteAdminToken ----
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct DeleteAdminTokenRequest {
+	/// Admin API token ID
 	pub id: String,
 }
 
@@ -736,9 +750,12 @@ pub struct ImportKeyResponse(pub GetKeyInfoResponse);
 
 // ---- UpdateKey ----
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct UpdateKeyRequest {
+	/// Access key ID
 	pub id: String,
+	#[param(ignore = true)]
 	pub body: UpdateKeyRequestBody,
 }
 
@@ -763,8 +780,10 @@ pub struct UpdateKeyRequestBody {
 
 // ---- DeleteKey ----
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct DeleteKeyRequest {
+	/// Access key ID
 	pub id: String,
 }
 
@@ -891,9 +910,12 @@ pub struct CreateBucketLocalAlias {
 
 // ---- UpdateBucket ----
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct UpdateBucketRequest {
+	/// ID of the bucket to update
 	pub id: String,
+	#[param(ignore = true)]
 	pub body: UpdateBucketRequestBody,
 }
 
@@ -917,8 +939,10 @@ pub struct UpdateBucketWebsiteAccess {
 
 // ---- DeleteBucket ----
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct DeleteBucketRequest {
+	/// ID of the bucket to delete
 	pub id: String,
 }
 
@@ -1129,6 +1153,7 @@ pub enum RepairType {
 	Rebalance,
 	Scrub(ScrubCommand),
 	Aliases,
+	ClearResyncQueue,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

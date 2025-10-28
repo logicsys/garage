@@ -53,6 +53,9 @@
           tests-sqlite = testWith {
             GARAGE_TEST_INTEGRATION_DB_ENGINE = "sqlite";
           };
+          tests-fjall = testWith {
+            GARAGE_TEST_INTEGRATION_DB_ENGINE = "fjall";
+          };
         };
 
         # ---- developpment shell, for making native builds only ----
@@ -78,6 +81,9 @@
                 cargo-outdated
                 cargo-machete
                 nixpkgs-fmt
+                openssl
+                socat
+                killall
               ];
             };
           };

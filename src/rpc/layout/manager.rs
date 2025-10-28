@@ -105,7 +105,7 @@ impl LayoutManager {
 	}
 
 	pub fn add_table(&self, table_name: &'static str) {
-		let first_version = self.layout().versions().first().unwrap().version;
+		let first_version = self.layout().inner().versions.first().unwrap().version;
 
 		self.table_sync_version
 			.lock()
@@ -139,19 +139,20 @@ impl LayoutManager {
 
 	// ---- ACK LOCKING ----
 
-	pub fn write_lock_with<T, F>(self: &Arc<Self>, f: F) -> WriteLock<T>
+	pub fn write_lock_with<T, F>(self: &Arc<Self>, f: F) -> Result<WriteLock<T>, Error>
 	where
-		F: FnOnce(&LayoutHelper) -> T,
+		F: FnOnce(&[LayoutVersion]) -> T,
 	{
 		let layout = self.layout();
-		let version = layout.current().version;
-		let value = f(&layout);
+		let current_version = layout.current()?.version;
+		let versions = layout.versions()?;
+		let value = f(versions);
 		layout
 			.ack_lock
-			.get(&version)
+			.get(&current_version)
 			.unwrap()
 			.fetch_add(1, Ordering::Relaxed);
-		WriteLock::new(version, self, value)
+		Ok(WriteLock::new(current_version, self, value))
 	}
 
 	// ---- INTERNALS ---
@@ -228,13 +229,11 @@ impl LayoutManager {
 	}
 
 	/// Save cluster layout data to disk
-	async fn save_cluster_layout(&self) -> Result<(), Error> {
+	async fn save_cluster_layout(&self) {
 		let layout = self.layout.read().unwrap().inner().clone();
-		self.persist_cluster_layout
-			.save_async(&layout)
-			.await
-			.expect("Cannot save current cluster layout");
-		Ok(())
+		if let Err(e) = self.persist_cluster_layout.save_async(&layout).await {
+			error!("Failed to save cluster_layout: {}", e);
+		}
 	}
 
 	fn broadcast_update(self: &Arc<Self>, rpc: SystemRpc) {
@@ -312,7 +311,7 @@ impl LayoutManager {
 
 			self.change_notify.notify_waiters();
 			self.broadcast_update(SystemRpc::AdvertiseClusterLayout(new_layout));
-			self.save_cluster_layout().await?;
+			self.save_cluster_layout().await;
 		}
 
 		Ok(SystemRpc::Ok)
@@ -327,7 +326,7 @@ impl LayoutManager {
 		if let Some(new_trackers) = self.merge_layout_trackers(trackers) {
 			self.change_notify.notify_waiters();
 			self.broadcast_update(SystemRpc::AdvertiseClusterLayoutTrackers(new_trackers));
-			self.save_cluster_layout().await?;
+			self.save_cluster_layout().await;
 		}
 
 		Ok(SystemRpc::Ok)
@@ -369,7 +368,7 @@ impl<T> Drop for WriteLock<T> {
 		let layout = self.layout_manager.layout(); // acquire read lock
 		if let Some(counter) = layout.ack_lock.get(&self.layout_version) {
 			let prev_lock = counter.fetch_sub(1, Ordering::Relaxed);
-			if prev_lock == 1 && layout.current().version > self.layout_version {
+			if prev_lock == 1 && layout.current().unwrap().version > self.layout_version {
 				drop(layout); // release read lock, write lock will be acquired
 				self.layout_manager.ack_new_version();
 			}

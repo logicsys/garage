@@ -59,6 +59,12 @@ pub trait ApiHandler: Send + Sync + 'static {
 		req: Request<IncomingBody>,
 		endpoint: Self::Endpoint,
 	) -> impl Future<Output = Result<Response<BoxBody<Self::Error>>, Self::Error>> + Send;
+
+	/// Returns the key id used to authenticate this request. The ID returned must be safe to
+	/// log.
+	fn key_id_from_request(&self, _req: &Request<IncomingBody>) -> Option<String> {
+		None
+	}
 }
 
 pub struct ApiServer<A: ApiHandler> {
@@ -143,19 +149,20 @@ impl<A: ApiHandler> ApiServer<A> {
 	) -> Result<Response<BoxBody<A::Error>>, http::Error> {
 		let uri = req.uri().clone();
 
-		if let Ok(forwarded_for_ip_addr) =
+		let source = if let Ok(forwarded_for_ip_addr) =
 			forwarded_headers::handle_forwarded_for_headers(req.headers())
 		{
-			info!(
-				"{} (via {}) {} {}",
-				forwarded_for_ip_addr,
-				addr,
-				req.method(),
-				uri
-			);
+			format!("{forwarded_for_ip_addr} (via {addr})")
 		} else {
-			info!("{} {} {}", addr, req.method(), uri);
-		}
+			format!("{addr}")
+		};
+		// we only do this to log the access key, so we can discard any error
+		let key = self
+			.api_handler
+			.key_id_from_request(&req)
+			.map(|k| format!("(key {k}) "))
+			.unwrap_or_default();
+		info!("{source} {key}{} {uri}", req.method());
 		debug!("{:?}", req);
 
 		let tracer = opentelemetry::global::tracer("garage");
@@ -344,7 +351,11 @@ where
 
 	while !*must_exit.borrow() {
 		let (stream, client_addr) = tokio::select! {
-			acc = listener.accept() => acc?,
+			acc = listener.accept() => match acc {
+							Ok(r) => r,
+							Err(e) if e.kind() == std::io::ErrorKind::ConnectionAborted => continue,
+							Err(e) => return Err(e.into()),
+						},
 			_ = must_exit.changed() => continue,
 		};
 

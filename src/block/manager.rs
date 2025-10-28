@@ -48,6 +48,8 @@ pub const INLINE_THRESHOLD: usize = 3072;
 // to delete the block locally.
 pub(crate) const BLOCK_GC_DELAY: Duration = Duration::from_secs(600);
 
+const BLOCK_READ_SEMAPHORE_TIMEOUT: Duration = Duration::from_secs(15);
+
 /// RPC messages used to share blocks of data between nodes
 #[derive(Debug, Serialize, Deserialize)]
 pub enum BlockRpc {
@@ -85,6 +87,7 @@ pub struct BlockManager {
 	disable_scrub: bool,
 
 	mutation_lock: Vec<Mutex<BlockManagerLocked>>,
+	read_semaphore: Semaphore,
 
 	pub rc: BlockRc,
 	pub resync: BlockResyncManager,
@@ -174,6 +177,8 @@ impl BlockManager {
 				.iter()
 				.map(|_| Mutex::new(BlockManagerLocked()))
 				.collect::<Vec<_>>(),
+
+			read_semaphore: Semaphore::new(config.block_max_concurrent_reads),
 			rc,
 			resync,
 			system,
@@ -285,7 +290,7 @@ impl BlockManager {
 		let who = self
 			.system
 			.rpc_helper()
-			.block_read_nodes_of(hash, self.system.rpc_helper());
+			.block_read_nodes_of(hash, self.system.rpc_helper())?;
 
 		for node in who.iter() {
 			let node_id = NodeID::from(*node);
@@ -341,12 +346,9 @@ impl BlockManager {
 	/// layout version only: since blocks are immutable, we don't need to
 	/// do complex logic when several layour versions are active at once,
 	/// just move them directly to the new nodes.
-	pub(crate) fn storage_nodes_of(&self, hash: &Hash) -> Vec<Uuid> {
-		self.system
-			.cluster_layout()
-			.current()
-			.nodes_of(hash)
-			.collect()
+	pub(crate) fn storage_nodes_of(&self, hash: &Hash) -> Result<Vec<Uuid>, Error> {
+		let cluster_layout = self.system.cluster_layout();
+		Ok(cluster_layout.current()?.nodes_of(hash).collect())
 	}
 
 	// ---- Public interface ----
@@ -381,7 +383,7 @@ impl BlockManager {
 		prevent_compression: bool,
 		order_tag: Option<OrderTag>,
 	) -> Result<(), Error> {
-		let who = self.storage_nodes_of(&hash);
+		let who = self.storage_nodes_of(&hash)?;
 
 		let compression_level = self.compression_level.filter(|_| !prevent_compression);
 		let (header, bytes) = DataBlock::from_buffer(data, compression_level)
@@ -419,8 +421,8 @@ impl BlockManager {
 	}
 
 	/// Get number of items in the refcount table
-	pub fn rc_len(&self) -> Result<usize, Error> {
-		Ok(self.rc.rc_table.len()?)
+	pub fn rc_approximate_len(&self) -> Result<usize, Error> {
+		Ok(self.rc.rc_table.approximate_len()?)
 	}
 
 	/// Send command to start/stop/manager scrub worker
@@ -438,7 +440,7 @@ impl BlockManager {
 
 	/// List all resync errors
 	pub fn list_resync_errors(&self) -> Result<Vec<BlockResyncErrorInfo>, Error> {
-		let mut blocks = Vec::with_capacity(self.resync.errors.len()?);
+		let mut blocks = Vec::with_capacity(self.resync.errors.approximate_len()?);
 		for ent in self.resync.errors.iter()? {
 			let (hash, cnt) = ent?;
 			let cnt = ErrorCounter::decode(&cnt);
@@ -568,9 +570,6 @@ impl BlockManager {
 			match self.find_block(hash).await {
 				Some(p) => self.read_block_from(hash, &p).await,
 				None => {
-					// Not found but maybe we should have had it ??
-					self.resync
-						.put_to_resync(hash, 2 * self.system.rpc_helper().rpc_timeout())?;
 					return Err(Error::Message(format!(
 						"block {:?} not found on node",
 						hash
@@ -591,6 +590,15 @@ impl BlockManager {
 		block_path: &DataBlockPath,
 	) -> Result<DataBlock, Error> {
 		let (header, path) = block_path.as_parts_ref();
+
+		let permit = tokio::select! {
+			sem = self.read_semaphore.acquire() => sem.ok_or_message("acquire read semaphore")?,
+			_ = tokio::time::sleep(BLOCK_READ_SEMAPHORE_TIMEOUT) => {
+				self.metrics.block_read_semaphore_timeouts.add(1);
+				debug!("read block {:?}: read_semaphore acquire timeout", hash);
+				return Err(Error::Message("read block: read_semaphore acquire timeout".into()));
+			}
+		};
 
 		let mut f = fs::File::open(&path).await?;
 		let mut data = vec![];
@@ -615,6 +623,8 @@ impl BlockManager {
 
 			return Err(Error::CorruptData(*hash));
 		}
+
+		drop(permit);
 
 		Ok(data)
 	}
