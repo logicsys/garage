@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "garage.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "garage.labels" . | nindent 4 }}
 spec:
@@ -23,6 +24,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "garage.fullname" . }}-metrics
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "garage.labels" . | nindent 4 }}
   annotations:

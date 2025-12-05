@@ -3,6 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "garage.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
 data:
   garage.toml: |-
     {{- if .Values.garage.garageTomlString }}

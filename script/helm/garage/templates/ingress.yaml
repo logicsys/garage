@@ -16,6 +16,7 @@ apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
   name: {{ $fullName }}-s3-api
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "garage.labels" . | nindent 4 }}
     {{- with .Values.ingress.s3.api.labels }}
@@ -81,6 +82,7 @@ apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
   name: {{ $fullName }}-s3-web
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "garage.labels" . | nindent 4 }}
     {{- with .Values.ingress.s3.web.labels }}
