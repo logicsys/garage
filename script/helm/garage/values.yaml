@@ -143,6 +143,8 @@ service:
   # - ClusterIP (+ Ingress)
   # - NodePort (+ Ingress)
   # - LoadBalancer
+  # -- Optional annotations for the main service
+  annotations: {}
   type: ClusterIP
   s3:
     api:
