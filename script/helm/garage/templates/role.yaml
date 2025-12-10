@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: manage-crds-{{ .Release.Namespace }}-{{ .Release.Name }}
+  name: manage-garagenodes-{{ .Release.Namespace }}-{{ .Release.Name }}
   labels:
     {{- include "garage.labels" . | nindent 4 }}
 rules:
@@ -12,7 +12,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: allow-crds-for-{{ .Release.Namespace }}-{{ .Release.Name }}
+  name: allow-garagenodes-for-{{ .Release.Namespace }}-{{ .Release.Name }}
   labels:
     {{- include "garage.labels" . | nindent 4 }}
 subjects:
@@ -21,5 +21,5 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
-  name: manage-crds-{{ .Release.Namespace }}-{{ .Release.Name }}
+  name: manage-garagenodes-{{ .Release.Namespace }}-{{ .Release.Name }}
   apiGroup: rbac.authorization.k8s.io
