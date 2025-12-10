@@ -43,9 +43,8 @@ garage:
   existingRpcSecret: ""
   # -- This is not required if you use the integrated kubernetes discovery
   bootstrapPeers: []
-  # -- Set to true if you want to use k8s discovery but install the CRDs manually outside
-  # of the helm chart, for example if you operate at namespace level without cluster ressources
-  kubernetesSkipCrd: false
+  # -- Set to false if you want the garage processes installing/updating CRDs via ClusterRoles
+  kubernetesSkipCrd: true
   s3:
     api:
       region: "garage"
