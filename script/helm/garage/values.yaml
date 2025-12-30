@@ -93,6 +93,40 @@ deployment:
   # -- If using statefulset, allow Parallel or OrderedReady (default)
   podManagementPolicy: OrderedReady
 
+  # -- Per-node configurations for heterogeneous deployments.
+  # When set, creates one StatefulSet per configuration instead of a single workload.
+  # Each config can override: nodeSelector, affinity, tolerations, resources,
+  # and persistence paths (to use hostPath instead of PVC).
+  #
+  # SECURITY NOTE: Using hostPath volumes requires the Privileged Pod Security Standard.
+  # hostPath bypasses normal storage provisioning and grants direct host filesystem access.
+  # Always use nodeSelector to constrain pods to specific nodes when using hostPath.
+  #
+  # When hostPath is specified, replicaCount is automatically set to 1.
+  #
+  # Example for 2-node cluster with hostPath:
+  #   nodeConfigurations:
+  #     node1:
+  #       nodeSelector:
+  #         kubernetes.io/hostname: storage-node-1
+  #       persistence:
+  #         meta:
+  #           hostPath: /mnt/ssd/garage/meta
+  #         data:
+  #           hostPath: /mnt/ssd/garage/data
+  #       resources:
+  #         requests:
+  #           memory: "1Gi"
+  #     node2:
+  #       nodeSelector:
+  #         kubernetes.io/hostname: storage-node-2
+  #       persistence:
+  #         meta:
+  #           hostPath: /mnt/nvme/garage/meta
+  #         data:
+  #           hostPath: /mnt/nvme/garage/data
+  nodeConfigurations: {}
+
 image:
   # -- default to amd64 docker image
   repository: dxflrs/amd64_garage

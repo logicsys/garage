@@ -1,49 +1,88 @@
+{{- $configs := .Values.deployment.nodeConfigurations }}
+{{- if not $configs }}
+  {{- $configs = dict "" (dict) }}  {{/* Single entry with empty name = use all global values */}}
+{{- end }}
+
+{{- range $name, $nodeConfig := $configs }}
+{{- $kind := $.Values.deployment.kind }}
+
+{{/* Determine if hostPath should be used */}}
+{{- $metaHostPath := dig "persistence" "meta" "hostPath" "" $nodeConfig }}
+{{- $dataHostPath := dig "persistence" "data" "hostPath" "" $nodeConfig }}
+{{- $useHostPath := or (eq $kind "DaemonSet") (and $metaHostPath $dataHostPath) }}
+
+{{/* Determine replica count - enforce 1 when using hostPath */}}
+{{- $replicaCount := $.Values.deployment.replicaCount }}
+{{- if $useHostPath }}
+  {{- $replicaCount = 1 }}
+{{- end }}
+
+{{/* VALIDATION */}}
+{{- if and $name (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $name)) }}
+  {{- fail (printf "nodeConfiguration name '%s' must be a valid DNS label (lowercase, alphanumeric, hyphens)" $name) }}
+{{- end }}
+{{- if and $name (not $nodeConfig.nodeSelector) }}
+  {{- fail (printf "nodeConfiguration '%s' requires 'nodeSelector'" $name) }}
+{{- end }}
+{{- if or (and $metaHostPath (not $dataHostPath)) (and $dataHostPath (not $metaHostPath)) }}
+  {{- fail (printf "nodeConfiguration '%s': both meta.hostPath and data.hostPath must be set" $name) }}
+{{- end }}
+
 apiVersion: apps/v1
-kind: {{ .Values.deployment.kind }}
+kind: {{ $kind }}
 metadata:
-  name: {{ include "garage.fullname" . }}
+  name: {{ include "garage.fullname" $ }}{{- if $name }}-{{ $name }}{{- end }}
   labels:
-    {{- include "garage.labels" . | nindent 4 }}
+    {{- include "garage.labels" $ | nindent 4 }}
+    {{- if $name }}
+    garage.deuxfleurs.fr/node-config: {{ $name | quote }}
+    {{- end }}
 spec:
   selector:
     matchLabels:
-      {{- include "garage.selectorLabels" . | nindent 6 }}
-  {{- if eq .Values.deployment.kind "StatefulSet" }}
-  replicas: {{ .Values.deployment.replicaCount }}
-  serviceName: {{ include "garage.fullname" . }}-headless
-  podManagementPolicy: {{ .Values.deployment.podManagementPolicy }}
+      {{- include "garage.selectorLabels" $ | nindent 6 }}
+      {{- if $name }}
+      garage.deuxfleurs.fr/node-config: {{ $name | quote }}
+      {{- end }}
+  {{- if eq $kind "StatefulSet" }}
+  replicas: {{ $replicaCount }}
+  serviceName: {{ include "garage.fullname" $ }}{{- if $name }}-{{ $name }}{{- end }}-headless
+  podManagementPolicy: {{ $.Values.deployment.podManagementPolicy }}
   {{- end }}
   template:
     metadata:
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-      {{- with .Values.podAnnotations }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+      {{- with $.Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "garage.labels" . | nindent 8 }}
+        {{- include "garage.labels" $ | nindent 8 }}
+        {{- if $name }}
+        garage.deuxfleurs.fr/node-config: {{ $name | quote }}
+        {{- end }}
     spec:
-      {{- with .Values.imagePullSecrets }}
+      {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "garage.serviceAccountName" . }}
+      serviceAccountName: {{ include "garage.serviceAccountName" $ }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
       initContainers:
         # Copies garage.toml from configmap to temporary etc volume and replaces RPC secret placeholder
-        - name: {{ .Chart.Name }}-init
-          image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
-          imagePullPolicy: {{ .Values.initImage.pullPolicy }}
+        - name: {{ $.Chart.Name }}-init
+          image: "{{ $.Values.initImage.repository }}:{{ $.Values.initImage.tag }}"
+          imagePullPolicy: {{ $.Values.initImage.pullPolicy }}
           command: ["sh", "-c", "sed \"s/__RPC_SECRET_REPLACE__/$RPC_SECRET/\" /mnt/garage.toml > /mnt/etc/garage.toml"]
           env:
             - name: RPC_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "garage.rpcSecretName" . }}
+                  name: {{ include "garage.rpcSecretName" $ }}
                   key: rpcSecret
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
+            {{- toYaml $.Values.securityContext | nindent 12 }}
           volumeMounts:
             - name: configmap
               mountPath: /mnt/garage.toml
@@ -51,11 +90,11 @@ spec:
             - name: etc
               mountPath: /mnt/etc
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{ $.Chart.Name }}
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
           ports:
             - containerPort: 3900
               name: s3-api
@@ -63,7 +102,7 @@ spec:
               name: web-api
             - containerPort: 3903
               name: admin
-          {{- with .Values.environment }}
+          {{- with $.Values.environment }}
           env:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -75,34 +114,34 @@ spec:
             - name: etc
               mountPath: /etc/garage.toml
               subPath: garage.toml
-          {{- with .Values.extraVolumeMounts }}
+          {{- with $.Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.livenessProbe }}
+          {{- with $.Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.readinessProbe }}
+          {{- with $.Values.readinessProbe }}
           readinessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml ($nodeConfig.resources | default $.Values.resources) | nindent 12 }}
       volumes:
         - name: configmap
           configMap:
-            name: {{ include "garage.fullname" . }}-config
+            name: {{ include "garage.fullname" $ }}-config
         - name: etc
           emptyDir: {}
-        {{- if .Values.persistence.enabled }}
-        {{- if eq .Values.deployment.kind "DaemonSet" }}
+        {{- if $.Values.persistence.enabled }}
+        {{- if $useHostPath }}
         - name: meta
           hostPath:
-            path: {{ .Values.persistence.meta.hostPath }}
+            path: {{ $metaHostPath | default $.Values.persistence.meta.hostPath }}
             type: DirectoryOrCreate
         - name: data
           hostPath:
-            path: {{ .Values.persistence.data.hostPath }}
+            path: {{ $dataHostPath | default $.Values.persistence.data.hostPath }}
             type: DirectoryOrCreate
         {{- end }}
         {{- else }}
@@ -111,41 +150,50 @@ spec:
         - name: data
           emptyDir: {}
         {{- end }}
-        {{- with .Values.extraVolumes }}
+        {{- with $.Values.extraVolumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.nodeSelector }}
+      {{- with ($nodeConfig.nodeSelector | default $.Values.nodeSelector) }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- with ($nodeConfig.affinity | default $.Values.affinity) }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.tolerations }}
+      {{- with ($nodeConfig.tolerations | default $.Values.tolerations) }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-  {{- if and .Values.persistence.enabled (eq .Values.deployment.kind "StatefulSet") }}
+  {{/* volumeClaimTemplates only for StatefulSet WITHOUT hostPath */}}
+  {{- if and $.Values.persistence.enabled (eq $kind "StatefulSet") (not $useHostPath) }}
   volumeClaimTemplates:
   - metadata:
       name: meta
     spec:
       accessModes: [ "ReadWriteOnce" ]
-    {{- if hasKey .Values.persistence.meta "storageClass" }}
-      storageClassName: {{ .Values.persistence.meta.storageClass | quote }}
+    {{- $metaStorageClass := dig "persistence" "meta" "storageClass" nil $nodeConfig }}
+    {{- if ne $metaStorageClass nil }}
+      storageClassName: {{ $metaStorageClass | quote }}
+    {{- else if hasKey $.Values.persistence.meta "storageClass" }}
+      storageClassName: {{ $.Values.persistence.meta.storageClass | quote }}
     {{- end }}
       resources:
         requests:
-          storage: {{ .Values.persistence.meta.size | quote }}
+          storage: {{ dig "persistence" "meta" "size" $.Values.persistence.meta.size $nodeConfig | quote }}
   - metadata:
       name: data
     spec:
       accessModes: [ "ReadWriteOnce" ]
-    {{- if hasKey .Values.persistence.data "storageClass" }}
-      storageClassName: {{ .Values.persistence.data.storageClass | quote }}
+    {{- $dataStorageClass := dig "persistence" "data" "storageClass" nil $nodeConfig }}
+    {{- if ne $dataStorageClass nil }}
+      storageClassName: {{ $dataStorageClass | quote }}
+    {{- else if hasKey $.Values.persistence.data "storageClass" }}
+      storageClassName: {{ $.Values.persistence.data.storageClass | quote }}
     {{- end }}
       resources:
         requests:
-          storage: {{ .Values.persistence.data.size | quote }}
+          storage: {{ dig "persistence" "data" "size" $.Values.persistence.data.size $nodeConfig | quote }}
   {{- end }}
+---
+{{- end }}
