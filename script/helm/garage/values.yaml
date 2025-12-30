@@ -93,6 +93,15 @@ deployment:
   # -- If using statefulset, allow Parallel or OrderedReady (default)
   podManagementPolicy: OrderedReady
 
+  # -- Update strategy for StatefulSet/DaemonSet workloads.
+  # "RollingUpdate" (default): Pods updated automatically in reverse ordinal order
+  # "OnDelete": Pods only updated when manually deleted (full control over restart order)
+  #
+  # With "OnDelete", pods only update when manually deleted - useful for
+  # sequential restarts: delete node1 pod, wait for healthy, delete node2 pod, etc.
+  # https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
+  updateStrategy: RollingUpdate
+
   # -- Per-node configurations for heterogeneous deployments.
   # When set, creates one StatefulSet per configuration instead of a single workload.
   # Each config can override: nodeSelector, affinity, tolerations, resources,

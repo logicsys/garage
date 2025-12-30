@@ -48,6 +48,11 @@ spec:
   replicas: {{ $replicaCount }}
   serviceName: {{ include "garage.fullname" $ }}{{- if $name }}-{{ $name }}{{- end }}-headless
   podManagementPolicy: {{ $.Values.deployment.podManagementPolicy }}
+  updateStrategy:
+    type: {{ $.Values.deployment.updateStrategy | default "RollingUpdate" }}
+  {{- else if eq $kind "DaemonSet" }}
+  updateStrategy:
+    type: {{ $.Values.deployment.updateStrategy | default "RollingUpdate" }}
   {{- end }}
   template:
     metadata:
