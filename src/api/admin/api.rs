@@ -847,6 +847,7 @@ pub struct GetBucketInfoResponse {
 	/// Website configuration for this bucket
 	pub website_config: Option<GetBucketInfoWebsiteResponse>,
 	/// List of access keys that have permissions granted on this bucket
+	pub anonymous_access: bool,
 	pub keys: Vec<GetBucketInfoKey>,
 	/// Number of objects in this bucket
 	pub objects: i64,
@@ -926,6 +927,7 @@ pub struct UpdateBucketResponse(pub GetBucketInfoResponse);
 #[serde(rename_all = "camelCase")]
 pub struct UpdateBucketRequestBody {
 	pub website_access: Option<UpdateBucketWebsiteAccess>,
+	pub anonymous_access: Option<UpdateBucketAnonymousAccess>,
 	pub quotas: Option<ApiBucketQuotas>,
 }
 
@@ -935,6 +937,12 @@ pub struct UpdateBucketWebsiteAccess {
 	pub enabled: bool,
 	pub index_document: Option<String>,
 	pub error_document: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateBucketAnonymousAccess {
+	pub enabled: bool,
 }
 
 // ---- DeleteBucket ----
