@@ -59,10 +59,10 @@ impl Endpoint {
 		let path = uri.path().trim_start_matches('/');
 		let query = uri.query();
 
-		let (bucket, partition_key) = path
-			.split_once('/')
-			.map(|(b, p)| (b.to_owned(), p.trim_start_matches('/')))
-			.unwrap_or((path.to_owned(), ""));
+		let (bucket, partition_key) = path.split_once('/').map_or_else(
+			|| (path.to_owned(), ""),
+			|(b, p)| (b.to_owned(), p.trim_start_matches('/')),
+		);
 
 		if bucket.is_empty() {
 			return Err(Error::bad_request("Missing bucket name"));

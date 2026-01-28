@@ -328,9 +328,10 @@ impl Endpoint {
 		let (bucket, key) = if let Some(bucket) = bucket {
 			(bucket, path)
 		} else {
-			path.split_once('/')
-				.map(|(b, p)| (b.to_owned(), p.trim_start_matches('/')))
-				.unwrap_or((path.to_owned(), ""))
+			path.split_once('/').map_or_else(
+				|| (path.to_owned(), ""),
+				|(b, p)| (b.to_owned(), p.trim_start_matches('/')),
+			)
 		};
 
 		if *req.method() == Method::OPTIONS {
