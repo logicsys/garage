@@ -254,7 +254,7 @@
 \end{frame}
 
 \begin{frame}
-	\frametitle{Embedded UI comming this year!}
+	\frametitle{Official Embedded UI comming later this year!}
 	\begin{center}
 	    \includegraphics[width=0.9\linewidth]{assets/Garage Web Admin - Dashboard@2x.png}\\
 			\vspace{-1em}
@@ -262,11 +262,33 @@
 \end{frame}
 
 \begin{frame}
-	\frametitle{Embedded UI comming this year!}
+	\frametitle{Official Embedded UI comming this year!}
 	\begin{center}
 	    \includegraphics[width=0.9\linewidth]{assets/Garage Web Admin - Bucket details page@2x.png}\\
 			\vspace{-1em}
 	\end{center}
+\end{frame}
+
+\begin{frame}
+	\frametitle{How to make sense of garage metrics?}
+	\begin{center}
+	    \includegraphics[width=0.7\linewidth]{assets/garage-stats.png}\\
+			\vspace{-1em}
+	\end{center}
+\end{frame}
+
+\begin{frame}
+	\frametitle{What if things go wrong?}
+	\begin{itemize}
+	    \item set logs to debug with \texttt{RUST_LOG=garage_api_common=debug,garage_api_s3=debug,garage=debug}
+		\item auth issues: check your reverse proxy configuration
+		\item slow resync: check your network and disk IO usage, and \texttt{resync-tranquility} worker configuration
+		\item big LMDB database: stop garage and compact with \texttt{mdb\_copy -c}
+		\item ask us on matrix \texttt{\#garage:deuxfleurs.fr} or open an issue on git.deuxfleurs.fr!
+		\begin{itemize}
+		\item provide the output of \texttt{garage status}, \texttt{garage stats} and relevant metrics and logs
+        \end{itemize}
+	\end{itemize}
 \end{frame}
 
 \begin{frame}
