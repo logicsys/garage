@@ -187,6 +187,7 @@ strip = true
 [workspace.lints.clippy]
 # pedantic lints configuration
 doc_markdown = "warn"
+format_collect = "warn"
 manual_midpoint = "warn"
 semicolon_if_nothing_returned = "warn"
 unnecessary_semicolon = "warn"
