@@ -620,7 +620,7 @@ mod tests {
 	<Location>https://garage.tld/mybucket/a/plop</Location>\
 	<Bucket>mybucket</Bucket>\
 	<Key>a/plop</Key>\
-	<ETag>&quot;3858f62230ac3c915f300c664312c11f-9&quot;</ETag>\
+	<ETag>\"3858f62230ac3c915f300c664312c11f-9\"</ETag>\
     <ChecksumSHA1>ZJAnHyG8PeKz9tI8UTcHrJos39A=</ChecksumSHA1>\
     <ChecksumType>COMPOSITE</ChecksumType>\
 </CompleteMultipartUploadResult>"
@@ -720,7 +720,7 @@ mod tests {
   <Contents>\
     <Key>sample.jpg</Key>\
     <LastModified>1970-01-01T00:00:00.000Z</LastModified>\
-    <ETag>&quot;bf1d737a4d46a19f3bced6905cc8b902&quot;</ETag>\
+    <ETag>\"bf1d737a4d46a19f3bced6905cc8b902\"</ETag>\
     <Size>142863</Size>\
     <StorageClass>STANDARD</StorageClass>\
   </Contents>\
@@ -816,7 +816,7 @@ mod tests {
   <Contents>\
     <Key>ExampleObject.txt</Key>\
     <LastModified>1970-01-01T00:00:00.000Z</LastModified>\
-    <ETag>&quot;599bab3ed2c697f1d26842727561fd94&quot;</ETag>\
+    <ETag>\"599bab3ed2c697f1d26842727561fd94\"</ETag>\
     <Size>857</Size>\
     <StorageClass>REDUCED_REDUNDANCY</StorageClass>\
   </Contents>\
@@ -857,7 +857,7 @@ mod tests {
 			"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
 <ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\
   <Name>bucket</Name>\
-  <Prefix></Prefix>\
+  <Prefix/>\
   <ContinuationToken>1ueGcxLPRx1Tr/XYExHnhbYLgveDs2J/wm36Hy4vbOwM=</ContinuationToken>\
   <NextContinuationToken>qsdfjklm</NextContinuationToken>\
   <KeyCount>112</KeyCount>\
@@ -866,7 +866,7 @@ mod tests {
   <Contents>\
     <Key>happyfacex.jpg</Key>\
     <LastModified>1970-01-01T00:00:00.000Z</LastModified>\
-    <ETag>&quot;70ee1738b6b21e2c8a43f3a5ab0eee71&quot;</ETag>\
+    <ETag>\"70ee1738b6b21e2c8a43f3a5ab0eee71\"</ETag>\
     <Size>1111</Size>\
     <StorageClass>STANDARD</StorageClass>\
   </Contents>\
@@ -942,14 +942,14 @@ mod tests {
   <MaxParts>2</MaxParts>\
   <IsTruncated>true</IsTruncated>\
   <Part>\
-    <ETag>&quot;7778aef83f66abc1fa1e8477f296d394&quot;</ETag>\
+    <ETag>\"7778aef83f66abc1fa1e8477f296d394\"</ETag>\
     <LastModified>2010-11-10T20:48:34.000Z</LastModified>\
     <PartNumber>2</PartNumber>\
     <Size>10485760</Size>\
     <ChecksumSHA256>5RQ3A5uk0w7ojNjvegohch4JRBBGN/cLhsNrPzfv/hA=</ChecksumSHA256>\
   </Part>\
   <Part>\
-    <ETag>&quot;aaaa18db4cc2f85cedef654fccc4a4x8&quot;</ETag>\
+    <ETag>\"aaaa18db4cc2f85cedef654fccc4a4x8\"</ETag>\
     <LastModified>2010-11-10T20:48:33.000Z</LastModified>\
     <PartNumber>3</PartNumber>\
     <Size>10485760</Size>\

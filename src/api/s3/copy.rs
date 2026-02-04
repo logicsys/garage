@@ -877,7 +877,7 @@ mod tests {
 			"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
 <CopyObjectResult>\
     <LastModified>1970-01-01T00:00:00.000Z</LastModified>\
-    <ETag>&quot;9b2cf535f27731c974343645a3985328&quot;</ETag>\
+    <ETag>\"9b2cf535f27731c974343645a3985328\"</ETag>\
 </CopyObjectResult>\
 			"
 		);
@@ -889,7 +889,7 @@ mod tests {
 		let expected_retval = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
 <CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\
 	<LastModified>2011-04-11T20:34:56.000Z</LastModified>\
-	<ETag>&quot;9b2cf535f27731c974343645a3985328&quot;</ETag>\
+	<ETag>\"9b2cf535f27731c974343645a3985328\"</ETag>\
 </CopyPartResult>";
 		let v = CopyPartResult {
 			xmlns: (),
