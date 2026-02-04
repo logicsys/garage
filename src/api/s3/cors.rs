@@ -272,4 +272,72 @@ mod tests {
 
 		Ok(())
 	}
+
+	#[test]
+	fn test_serialize() -> Result<(), Error> {
+		let ref_xml_in = r#"<CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+ <CORSRule>
+   <AllowedOrigin>http://www.example.com</AllowedOrigin>
+
+   <AllowedMethod>PUT</AllowedMethod>
+   <AllowedMethod>POST</AllowedMethod>
+   <AllowedMethod>DELETE</AllowedMethod>
+
+   <AllowedHeader>*</AllowedHeader>
+ </CORSRule>
+ <CORSRule>
+   <AllowedOrigin>*</AllowedOrigin>
+   <AllowedMethod>GET</AllowedMethod>
+ </CORSRule>
+ <CORSRule>
+   <ID>qsdfjklm</ID>
+   <MaxAgeSeconds>12345</MaxAgeSeconds>
+   <AllowedOrigin>https://perdu.com</AllowedOrigin>
+
+   <AllowedMethod>GET</AllowedMethod>
+   <AllowedMethod>DELETE</AllowedMethod>
+   <AllowedHeader>*</AllowedHeader>
+   <ExposeHeader>*</ExposeHeader>
+ </CORSRule>
+</CORSConfiguration>"#;
+		let ref_xml = unprettify_xml(ref_xml_in);
+
+		let ref_value = CorsConfiguration {
+			xmlns: (),
+			cors_rules: vec![
+				CorsRule {
+					id: None,
+					max_age_seconds: None,
+					allowed_origins: vec!["http://www.example.com".into()],
+					allowed_methods: vec!["PUT".into(), "POST".into(), "DELETE".into()],
+					allowed_headers: vec!["*".into()],
+					expose_headers: vec![],
+				},
+				CorsRule {
+					id: None,
+					max_age_seconds: None,
+					allowed_origins: vec!["*".into()],
+					allowed_methods: vec!["GET".into()],
+					allowed_headers: vec![],
+					expose_headers: vec![],
+				},
+				CorsRule {
+					id: Some("qsdfjklm".into()),
+					max_age_seconds: Some(IntValue(12345)),
+					allowed_origins: vec!["https://perdu.com".into()],
+					allowed_methods: vec!["GET".into(), "DELETE".into()],
+					allowed_headers: vec!["*".into()],
+					expose_headers: vec!["*".into()],
+				},
+			],
+		};
+		let conf = quick_xml::se::to_string(&ref_value).expect("failed to serialize");
+
+		assert_eq! {
+			conf,
+			ref_xml
+		};
+
+		Ok(())
+	}
 }
