@@ -712,8 +712,8 @@ mod tests {
 			"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
 <ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\
   <Name>example-bucket</Name>\
-  <Prefix></Prefix>\
-  <Marker></Marker>\
+  <Prefix/>\
+  <Marker/>\
   <MaxKeys>1000</MaxKeys>\
   <Delimiter>/</Delimiter>\
   <IsTruncated>false</IsTruncated>\
@@ -764,7 +764,7 @@ mod tests {
 <ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\
   <Name>example-bucket</Name>\
   <Prefix>photos/2006/</Prefix>\
-  <Marker></Marker>\
+  <Marker/>\
   <MaxKeys>1000</MaxKeys>\
   <Delimiter>/</Delimiter>\
   <IsTruncated>false</IsTruncated>\

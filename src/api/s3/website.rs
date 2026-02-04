@@ -415,7 +415,7 @@ mod tests {
       </RoutingRule>
       <RoutingRule>
          <Condition>
-            <KeyPrefixEquals></KeyPrefixEquals>
+            <KeyPrefixEquals/>
          </Condition>
          <Redirect>
             <HttpRedirectCode>404</HttpRedirectCode>
