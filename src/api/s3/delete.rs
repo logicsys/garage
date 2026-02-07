@@ -132,6 +132,11 @@ fn parse_delete_objects_xml(xml: &roxmltree::Document) -> Option<DeleteRequest> 
 	}
 
 	for item in delete.children() {
+		// Only parse <Part> nodes
+		if !item.is_element() {
+			continue;
+		}
+
 		if item.has_tag_name("Object") {
 			let key = item.children().find(|e| e.has_tag_name("Key"))?;
 			let key_str = key.text()?;
