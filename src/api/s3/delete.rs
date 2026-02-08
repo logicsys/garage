@@ -132,17 +132,14 @@ fn parse_delete_objects_xml(xml: &roxmltree::Document) -> Option<DeleteRequest> 
 	}
 
 	for item in delete.children() {
-
 		// Only parse <Part> nodes
 		if !item.is_element() {
-
 			// text nodes are allowed only if they contain whitespace characters only
 			if let Some(text) = item.text() {
-				let trimmed_text: String = text.chars()
-					.filter(|&c| !c.is_ascii_whitespace())
-					.collect();
+				let trimmed_text: String =
+					text.chars().filter(|&c| !c.is_ascii_whitespace()).collect();
 
-				if trimmed_text.is_empty () {
+				if trimmed_text.is_empty() {
 					continue;
 				} else {
 					return None;
