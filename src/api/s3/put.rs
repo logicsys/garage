@@ -39,8 +39,6 @@ use crate::encryption::{EncryptionParams, OekDerivationInfo};
 use crate::error::*;
 use crate::website::X_AMZ_WEBSITE_REDIRECT_LOCATION;
 
-const PUT_BLOCKS_MAX_PARALLEL: usize = 3;
-
 pub(crate) struct SaveStreamResult {
 	pub(crate) version_uuid: Uuid,
 	pub(crate) version_timestamp: u64,
@@ -93,7 +91,7 @@ pub async fn handle_put(
 		OekDerivationInfo {
 			bucket_id: ctx.bucket_id,
 			version_id: version_uuid,
-			object_key: &key,
+			object_key: key,
 		},
 	)?;
 
@@ -160,7 +158,7 @@ pub(crate) async fn save_stream<S: Stream<Item = Result<Bytes, Error>> + Unpin>(
 	let mut checksummer = match &checksum_mode {
 		ChecksumMode::Verify(expected) => Checksummer::init(expected, !encryption.is_encrypted()),
 		ChecksumMode::Calculate(algo) => {
-			Checksummer::init(&Default::default(), !encryption.is_encrypted()).add(*algo)
+			Checksummer::init(&Default::default(), !encryption.is_encrypted()).add_algorithm(*algo)
 		}
 		ChecksumMode::VerifyFrom { .. } => {
 			// Checksums are calculated by the garage_api_common::signature module
@@ -507,7 +505,7 @@ pub(crate) async fn read_and_put_blocks<S: Stream<Item = Result<Bytes, Error>> +
 			};
 			let recv_next = async {
 				// If more than a maximum number of writes are in progress, don't add more for now
-				if currently_running >= PUT_BLOCKS_MAX_PARALLEL {
+				if currently_running >= ctx.garage.config.block_max_concurrent_writes_per_request {
 					futures::future::pending().await
 				} else {
 					block_rx3.recv().await
@@ -556,6 +554,7 @@ pub(crate) async fn read_and_put_blocks<S: Stream<Item = Result<Bytes, Error>> +
 	Ok((total_size, checksums, first_block_hash))
 }
 
+#[expect(clippy::too_many_arguments)]
 async fn put_block_and_meta(
 	ctx: &ReqCtx,
 	version: &Version,
@@ -670,7 +669,7 @@ pub(crate) fn extract_metadata_headers(
 	let mut ret = Vec::new();
 
 	// Preserve standard headers
-	let standard_header = vec![
+	let standard_header = [
 		hyper::header::CONTENT_TYPE,
 		hyper::header::CACHE_CONTROL,
 		hyper::header::CONTENT_DISPOSITION,

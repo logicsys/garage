@@ -138,10 +138,26 @@ pub async fn handle_post_object(
 
 	let mut conditions = decoded_policy.into_conditions()?;
 
+	// If there are conditions on the bucket name, check these against the actual bucket_name rather
+	// than the one in params, which is allowed to be absent.
+	if let Some(conds) = conditions.params.remove("bucket") {
+		for cond in conds {
+			let ok = match cond {
+				Operation::Equal(s) => s.as_str() == bucket_name,
+				Operation::StartsWith(s) => bucket_name.starts_with(&s),
+			};
+			if !ok {
+				return Err(Error::bad_request(
+					"Key 'bucket' has value not allowed in policy",
+				));
+			}
+		}
+	}
+
 	for (param_key, value) in params.iter() {
 		let param_key = param_key.as_str();
 		match param_key {
-			"policy" | "x-amz-signature" => (), // this is always accepted, as it's required to validate other fields
+			"policy" | "x-amz-signature" | "bucket" => (), // this is always accepted, as it's required to validate other fields
 			"content-type" => {
 				let conds = conditions.params.remove("content-type").ok_or_else(|| {
 					Error::bad_request(format!("Key '{}' is not allowed in policy", param_key))
@@ -489,15 +505,15 @@ mod tests {
 		let mut conditions = policy_2.into_conditions().unwrap();
 
 		assert_eq!(
-			conditions.params.remove(&"acl".to_string()),
+			conditions.params.remove("acl"),
 			Some(vec![Operation::Equal("public-read".into())])
 		);
 		assert_eq!(
-			conditions.params.remove(&"bucket".to_string()),
+			conditions.params.remove("bucket"),
 			Some(vec![Operation::Equal("johnsmith".into())])
 		);
 		assert_eq!(
-			conditions.params.remove(&"key".to_string()),
+			conditions.params.remove("key"),
 			Some(vec![Operation::StartsWith("user/eric/".into())])
 		);
 		assert!(conditions.params.is_empty());
@@ -520,7 +536,7 @@ mod tests {
 		let mut conditions = policy_2.into_conditions().unwrap();
 
 		assert_eq!(
-			conditions.params.remove(&"acl".to_string()),
+			conditions.params.remove("acl"),
 			Some(vec![Operation::Equal("public-read".into())])
 		);
 		assert_eq!(
@@ -528,9 +544,7 @@ mod tests {
 			vec![Operation::StartsWith("image/".into())]
 		);
 		assert_eq!(
-			conditions
-				.params
-				.remove(&"success_action_redirect".to_string()),
+			conditions.params.remove("success_action_redirect"),
 			Some(vec![Operation::StartsWith("".into())])
 		);
 		assert!(conditions.params.is_empty());

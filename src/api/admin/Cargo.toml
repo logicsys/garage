@@ -1,6 +1,6 @@
 [package]
 name = "garage_api_admin"
-version = "2.1.0"
+version = "2.2.0"
 authors = ["Alex Auvolat <alex@adnab.me>"]
 edition = "2018"
 license = "AGPL-3.0"
@@ -46,5 +46,5 @@ opentelemetry-prometheus = { workspace = true, optional = true }
 prometheus = { workspace = true, optional = true }
 
 [features]
-metrics = [ "opentelemetry-prometheus", "prometheus" ]
-k2v = [ "garage_model/k2v" ]
+metrics = ["opentelemetry-prometheus", "prometheus"]
+k2v = ["garage_model/k2v"]

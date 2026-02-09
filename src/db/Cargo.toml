@@ -1,6 +1,6 @@
 [package]
 name = "garage_db"
-version = "2.1.0"
+version = "2.2.0"
 authors = ["Alex Auvolat <alex@adnab.me>"]
 edition = "2018"
 license = "AGPL-3.0"
@@ -28,8 +28,8 @@ parking_lot = { workspace = true, optional = true }
 mktemp.workspace = true
 
 [features]
-default = [ "lmdb", "sqlite" ]
-bundled-libs = [ "rusqlite?/bundled" ]
-lmdb = [ "heed" ]
-fjall = [ "dep:fjall", "dep:parking_lot" ]
-sqlite = [ "rusqlite", "r2d2", "r2d2_sqlite" ]
+default = ["lmdb", "sqlite"]
+bundled-libs = ["rusqlite?/bundled"]
+lmdb = ["heed"]
+fjall = ["dep:fjall", "dep:parking_lot"]
+sqlite = ["rusqlite", "r2d2", "r2d2_sqlite"]

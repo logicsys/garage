@@ -15,8 +15,7 @@ use garage_web::WebServer;
 use garage_api_k2v::api_server::K2VApiServer;
 
 use crate::secrets::{fill_secrets, Secrets};
-#[cfg(feature = "telemetry-otlp")]
-use crate::tracing_setup::*;
+use crate::tracing_setup::init_tracing;
 
 async fn wait_from(mut chan: watch::Receiver<bool>) {
 	while !*chan.borrow() {
@@ -52,14 +51,9 @@ pub async fn run_server(config_file: PathBuf, secrets: Secrets) -> Result<(), Er
 	info!("Spawning Garage workers...");
 	garage.spawn_workers(&background)?;
 
-	if config.admin.trace_sink.is_some() {
+	if let Some(admin_trace_sink) = &config.admin.trace_sink {
 		info!("Initialize tracing...");
-
-		#[cfg(feature = "telemetry-otlp")]
-		init_tracing(config.admin.trace_sink.as_ref().unwrap(), garage.system.id)?;
-
-		#[cfg(not(feature = "telemetry-otlp"))]
-		error!("Garage was built without OTLP exporter, admin.trace_sink is ignored.");
+		init_tracing(admin_trace_sink, garage.system.id)?;
 	}
 
 	info!("Initialize Admin API server and metrics collector...");
@@ -90,7 +84,7 @@ pub async fn run_server(config_file: PathBuf, secrets: Secrets) -> Result<(), Er
 		));
 	}
 
-	if config.k2v_api.is_some() {
+	if let Some(k2v_api) = &config.k2v_api {
 		#[cfg(feature = "k2v")]
 		{
 			info!("Initializing K2V API server...");
@@ -98,7 +92,7 @@ pub async fn run_server(config_file: PathBuf, secrets: Secrets) -> Result<(), Er
 				"K2V API",
 				tokio::spawn(K2VApiServer::run(
 					garage.clone(),
-					config.k2v_api.as_ref().unwrap().api_bind_addr.clone(),
+					k2v_api.api_bind_addr.clone(),
 					config.s3_api.s3_region.clone(),
 					watch_cancel.clone(),
 				)),
@@ -110,7 +104,7 @@ pub async fn run_server(config_file: PathBuf, secrets: Secrets) -> Result<(), Er
 
 	if let Some(web_config) = &config.s3_web {
 		info!("Initializing web server...");
-		let web_server = WebServer::new(garage.clone(), &web_config);
+		let web_server = WebServer::new(garage.clone(), web_config);
 		servers.push((
 			"Web",
 			tokio::spawn(web_server.run(web_config.bind_addr.clone(), watch_cancel.clone())),

@@ -24,22 +24,22 @@ default-members = ["src/garage"]
 
 # Internal Garage crates
 format_table = { version = "0.1.1", path = "src/format-table" }
-garage_api_common = { version = "2.1.0", path = "src/api/common" }
-garage_api_admin = { version = "2.1.0", path = "src/api/admin" }
-garage_api_s3 = { version = "2.1.0", path = "src/api/s3" }
-garage_api_k2v = { version = "2.1.0", path = "src/api/k2v" }
-garage_block = { version = "2.1.0", path = "src/block" }
-garage_db = { version = "2.1.0", path = "src/db", default-features = false }
-garage_model = { version = "2.1.0", path = "src/model", default-features = false }
-garage_net = { version = "2.1.0", path = "src/net" }
-garage_rpc = { version = "2.1.0", path = "src/rpc" }
-garage_table = { version = "2.1.0", path = "src/table" }
-garage_util = { version = "2.1.0", path = "src/util" }
-garage_web = { version = "2.1.0", path = "src/web" }
+garage_api_common = { version = "2.2.0", path = "src/api/common" }
+garage_api_admin = { version = "2.2.0", path = "src/api/admin" }
+garage_api_s3 = { version = "2.2.0", path = "src/api/s3" }
+garage_api_k2v = { version = "2.2.0", path = "src/api/k2v" }
+garage_block = { version = "2.2.0", path = "src/block" }
+garage_db = { version = "2.2.0", path = "src/db", default-features = false }
+garage_model = { version = "2.2.0", path = "src/model", default-features = false }
+garage_net = { version = "2.2.0", path = "src/net" }
+garage_rpc = { version = "2.2.0", path = "src/rpc" }
+garage_table = { version = "2.2.0", path = "src/table" }
+garage_util = { version = "2.2.0", path = "src/util" }
+garage_web = { version = "2.2.0", path = "src/web" }
 k2v-client = { version = "0.0.4", path = "src/k2v-client" }
 
 # External crates from crates.io
-arc-swap = "1.0"
+arc-swap = "1.1"
 argon2 = "0.5"
 async-trait = "0.1.7"
 backtrace = "0.3"
@@ -86,7 +86,7 @@ tracing = "0.1"
 tracing-journald = "0.3.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-heed = { version = "0.11", default-features = false, features = ["lmdb"] }
+heed = { version = "0.22", default-features = false, features = [] }
 rusqlite = "0.37"
 r2d2 = "0.8"
 r2d2_sqlite = "0.31"
@@ -95,7 +95,7 @@ fjall = "2.4"
 async-compression = { version = "0.4", features = ["tokio", "zstd"] }
 zstd = { version = "0.13", default-features = false }
 
-quick-xml = { version = "0.26", features = [ "serialize" ] }
+quick-xml = { version = "0.26", features = ["serialize"] }
 rmp-serde = "1.1.2"
 serde = { version = "1.0", default-features = false, features = ["derive", "rc"] }
 serde_bytes = "0.11"
@@ -115,7 +115,7 @@ httpdate = "1.0"
 http-range = "0.1"
 http-body-util = "0.1"
 hyper = { version = "1.0", default-features = false }
-hyper-util = { version = "0.1", features = [ "full" ] }
+hyper-util = { version = "0.1", features = ["full"] }
 multer = "3.0"
 percent-encoding = "2.2"
 roxmltree = "0.19"
@@ -123,11 +123,11 @@ url = "2.3"
 
 futures = "0.3"
 futures-util = "0.3"
-tokio = { version = "1.0", default-features = false, features = ["net", "rt", "rt-multi-thread", "io-util", "net", "time", "macros", "sync", "signal", "fs"] }
+tokio = { version = "1.0", default-features = false, features = ["rt", "rt-multi-thread", "io-util", "net", "time", "macros", "sync", "signal", "fs"] }
 tokio-util = { version = "0.7", features = ["compat", "io"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 
-opentelemetry = { version = "0.17", features = [ "rt-tokio", "metrics", "trace" ] }
+opentelemetry = { version = "0.17", features = ["rt-tokio", "metrics", "trace"] }
 opentelemetry-prometheus = "0.10"
 opentelemetry-otlp = "0.10"
 opentelemetry-contrib = "0.9"

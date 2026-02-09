@@ -1,6 +1,6 @@
 use core::ops::Bound;
 
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 
 use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
@@ -20,7 +20,7 @@ pub use fjall;
 
 // --
 
-pub(crate) fn open_db(path: &PathBuf, opt: &OpenOpt) -> Result<Db> {
+pub(crate) fn open_db(path: &Path, opt: &OpenOpt) -> Result<Db> {
 	info!("Opening Fjall database at: {}", path.display());
 	if opt.fsync {
 		return Err(Error(
@@ -105,15 +105,14 @@ impl IDb for FjallDb {
 	}
 
 	fn list_trees(&self) -> Result<Vec<String>> {
-		Ok(self
-			.keyspace
+		self.keyspace
 			.list_partitions()
 			.iter()
-			.map(|n| decode_name(&n))
-			.collect::<Result<Vec<_>>>()?)
+			.map(|n| decode_name(n))
+			.collect::<Result<Vec<_>>>()
 	}
 
-	fn snapshot(&self, base_path: &PathBuf) -> Result<()> {
+	fn snapshot(&self, base_path: &Path) -> Result<()> {
 		std::fs::create_dir_all(base_path)?;
 		let path = Engine::Fjall.db_path(base_path);
 
@@ -272,7 +271,7 @@ impl<'a> FjallTx<'a> {
 	fn get_tree(&self, i: usize) -> TxOpResult<&TransactionalPartitionHandle> {
 		self.trees.get(i).map(|tup| &tup.1).ok_or_else(|| {
 			TxOpError(Error(
-				"invalid tree id (it might have been openned after the transaction started)".into(),
+				"invalid tree id (it might have been opened after the transaction started)".into(),
 			))
 		})
 	}
@@ -288,7 +287,7 @@ impl<'a> ITx for FjallTx<'a> {
 	}
 	fn len(&self, tree_idx: usize) -> TxOpResult<usize> {
 		let tree = self.get_tree(tree_idx)?;
-		Ok(self.tx.len(tree)? as usize)
+		Ok(self.tx.len(tree)?)
 	}
 
 	fn insert(&mut self, tree_idx: usize, key: &[u8], value: &[u8]) -> TxOpResult<()> {
@@ -325,7 +324,7 @@ impl<'a> ITx for FjallTx<'a> {
 		let high = clone_bound(high);
 		Ok(Box::new(
 			self.tx
-				.range::<Vec<u8>, ByteVecRangeBounds>(&tree, (low, high))
+				.range::<Vec<u8>, ByteVecRangeBounds>(tree, (low, high))
 				.map(iterator_remap_tx),
 		))
 	}
@@ -340,7 +339,7 @@ impl<'a> ITx for FjallTx<'a> {
 		let high = clone_bound(high);
 		Ok(Box::new(
 			self.tx
-				.range::<Vec<u8>, ByteVecRangeBounds>(&tree, (low, high))
+				.range::<Vec<u8>, ByteVecRangeBounds>(tree, (low, high))
 				.rev()
 				.map(iterator_remap_tx),
 		))

@@ -262,7 +262,7 @@ impl DataLayout {
 	pub(crate) fn primary_block_dir(&self, hash: &Hash) -> PathBuf {
 		let ipart = self.partition_from(hash);
 		let idir = self.part_prim[ipart] as usize;
-		self.block_dir_from(hash, &self.data_dirs[idir].path)
+		self.block_dir_from(hash, self.data_dirs[idir].path.clone())
 	}
 
 	pub(crate) fn secondary_block_dirs<'a>(
@@ -272,7 +272,7 @@ impl DataLayout {
 		let ipart = self.partition_from(hash);
 		self.part_sec[ipart]
 			.iter()
-			.map(move |idir| self.block_dir_from(hash, &self.data_dirs[*idir as usize].path))
+			.map(move |idir| self.block_dir_from(hash, self.data_dirs[*idir as usize].path.clone()))
 	}
 
 	fn partition_from(&self, hash: &Hash) -> usize {
@@ -283,8 +283,7 @@ impl DataLayout {
 			% DRIVE_NPART
 	}
 
-	fn block_dir_from(&self, hash: &Hash, dir: &PathBuf) -> PathBuf {
-		let mut path = dir.clone();
+	fn block_dir_from(&self, hash: &Hash, mut path: PathBuf) -> PathBuf {
 		path.push(hex::encode(&hash.as_slice()[0..1]));
 		path.push(hex::encode(&hash.as_slice()[1..2]));
 		path
@@ -326,7 +325,7 @@ fn make_data_dirs(dirs: &DataDirEnum) -> Result<Vec<DataDir>, Error> {
 			let mut ok = false;
 			for dir in dirs.iter() {
 				let state = match &dir.capacity {
-					Some(cap) if dir.read_only == false => {
+					Some(cap) if !dir.read_only => {
 						let capacity = cap.parse::<bytesize::ByteSize>()
 							.ok_or_message("invalid capacity value")?.as_u64();
 						if capacity == 0 {
@@ -337,7 +336,7 @@ fn make_data_dirs(dirs: &DataDirEnum) -> Result<Vec<DataDir>, Error> {
 							capacity,
 						}
 					}
-					None if dir.read_only == true => {
+					None if dir.read_only => {
 						DataDirState::ReadOnly
 					}
 					_ => return Err(Error::Message(format!("data directories in data_dir should have a capacity value or be marked read_only, not the case for {}", dir.path.to_string_lossy()))),
@@ -359,7 +358,7 @@ fn make_data_dirs(dirs: &DataDirEnum) -> Result<Vec<DataDir>, Error> {
 }
 
 fn dir_not_empty(path: &PathBuf) -> Result<bool, Error> {
-	for entry in std::fs::read_dir(&path)? {
+	for entry in std::fs::read_dir(path)? {
 		let dir = entry?;
 		let ft = dir.file_type()?;
 		let name = dir.file_name().into_string().ok();

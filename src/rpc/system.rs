@@ -55,7 +55,7 @@ pub const SYSTEM_RPC_PATH: &str = "garage_rpc/system.rs/SystemRpc";
 pub enum SystemRpc {
 	/// Response to successful advertisements
 	Ok,
-	/// Request to connect to a specific node (in <pubkey>@<host>:<port> format, pubkey = full-length node ID)
+	/// Request to connect to a specific node (in `<pubkey>@<host>:<port>` format, pubkey = full-length node ID)
 	Connect(String),
 	/// Advertise Garage status. Answered with another AdvertiseStatus.
 	/// Exchanged with every node on a regular basis.
@@ -856,6 +856,7 @@ impl NodeStatus {
 		};
 
 		let mount_avail = |path: &Path| match statvfs(path) {
+			#[allow(clippy::unnecessary_cast)]
 			Ok(x) => {
 				let avail = x.blocks_available() as u64 * x.fragment_size() as u64;
 				let total = x.blocks() as u64 * x.fragment_size() as u64;
@@ -951,13 +952,13 @@ fn get_rpc_public_addr(config: &Config) -> Option<SocketAddr> {
 			let filter_subnet: Option<ipnet::IpNet> = config
 				.rpc_public_addr_subnet
 				.as_ref()
-				.and_then(|filter_subnet_str| match filter_subnet_str.parse::<ipnet::IpNet>() {
+				.map(|filter_subnet_str| match filter_subnet_str.parse::<ipnet::IpNet>() {
 					Ok(filter_subnet) => {
 						let filter_subnet_trunc = filter_subnet.trunc();
 						if filter_subnet_trunc != filter_subnet {
 							warn!("`rpc_public_addr_subnet` changed after applying netmask, continuing with {}", filter_subnet.trunc());
 						}
-						Some(filter_subnet_trunc)
+						filter_subnet_trunc
 					}
 					Err(e) => {
 						panic!(

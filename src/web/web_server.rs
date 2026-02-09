@@ -155,8 +155,8 @@ impl WebServer {
 			.span_builder(format!("Web {} request", req.method()))
 			.with_trace_id(gen_trace_id())
 			.with_attributes(vec![
-				KeyValue::new("host", format!("{}", host_header.clone())),
-				KeyValue::new("method", format!("{}", req.method())),
+				KeyValue::new("host", host_header.clone()),
+				KeyValue::new("method", req.method().to_string()),
 				KeyValue::new("uri", req.uri().to_string()),
 			])
 			.start(&tracer);
@@ -429,11 +429,11 @@ async fn handle_inner(
 		// - Caching directives such as If-None-Match, etc, which are not relevant
 		let cleaned_req = Request::builder().uri(req.uri()).body(()).unwrap();
 
-		let mut ret = match req.method() {
-			&Method::HEAD => {
+		let mut ret = match *req.method() {
+			Method::HEAD => {
 				handle_head_without_ctx(garage, &cleaned_req, bucket_id, key, None).await?
 			}
-			&Method::GET => {
+			Method::GET => {
 				handle_get_without_ctx(
 					garage,
 					&cleaned_req,
@@ -451,9 +451,9 @@ async fn handle_inner(
 
 		Ok(ret)
 	} else {
-		match req.method() {
-			&Method::HEAD => handle_head_without_ctx(garage, req, bucket_id, key, None).await,
-			&Method::GET => {
+		match *req.method() {
+			Method::HEAD => handle_head_without_ctx(garage, req, bucket_id, key, None).await,
+			Method::GET => {
 				handle_get_without_ctx(garage, req, bucket_id, key, None, Default::default()).await
 			}
 			_ => Err(ApiError::bad_request("HTTP method not supported")),
@@ -543,7 +543,7 @@ impl RoutingResult {
 /// When a path ends with "/", we append the index name to match traditional web server behavior
 /// which is also AWS S3 behavior.
 ///
-/// Check: https://docs.aws.amazon.com/AmazonS3/latest/userguide/IndexDocumentSupport.html
+/// Check: <https://docs.aws.amazon.com/AmazonS3/latest/userguide/IndexDocumentSupport.html>
 fn path_to_keys(
 	path: &str,
 	index: &str,
@@ -644,7 +644,7 @@ fn path_to_keys(
 	} else {
 		Ok(RoutingResult::LoadOrRedirect {
 			redirect_if_exists: Some(format!("{key}/{index}")),
-			// we can't use `path` because key might have changed substentially in case of
+			// we can't use `path` because key might have changed substantially in case of
 			// routing rules
 			redirect_url: percent_encoding::percent_encode(
 				format!("/{key}/").as_bytes(),

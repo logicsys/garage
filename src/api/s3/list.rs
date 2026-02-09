@@ -324,31 +324,31 @@ pub async fn handle_list_parts(
 					size: s3_xml::IntValue(part.size as i64),
 					checksum_crc32: match &checksum {
 						Some(ChecksumValue::Crc32(x)) => {
-							Some(s3_xml::Value(BASE64_STANDARD.encode(&x)))
+							Some(s3_xml::Value(BASE64_STANDARD.encode(x)))
 						}
 						_ => None,
 					},
 					checksum_crc32c: match &checksum {
 						Some(ChecksumValue::Crc32c(x)) => {
-							Some(s3_xml::Value(BASE64_STANDARD.encode(&x)))
+							Some(s3_xml::Value(BASE64_STANDARD.encode(x)))
 						}
 						_ => None,
 					},
 					checksum_crc64nvme: match &checksum {
 						Some(ChecksumValue::Crc64Nvme(x)) => {
-							Some(s3_xml::Value(BASE64_STANDARD.encode(&x)))
+							Some(s3_xml::Value(BASE64_STANDARD.encode(x)))
 						}
 						_ => None,
 					},
 					checksum_sha1: match &checksum {
 						Some(ChecksumValue::Sha1(x)) => {
-							Some(s3_xml::Value(BASE64_STANDARD.encode(&x)))
+							Some(s3_xml::Value(BASE64_STANDARD.encode(x)))
 						}
 						_ => None,
 					},
 					checksum_sha256: match &checksum {
 						Some(ChecksumValue::Sha256(x)) => {
-							Some(s3_xml::Value(BASE64_STANDARD.encode(&x)))
+							Some(s3_xml::Value(BASE64_STANDARD.encode(x)))
 						}
 						_ => None,
 					},
@@ -598,7 +598,7 @@ impl ListObjectsQuery {
 					Some("[") => Ok(RangeBegin::IncludingKey {
 						key: String::from_utf8(
 							BASE64_STANDARD
-								.decode(token[1..].as_bytes())
+								.decode(&token.as_bytes()[1..])
 								.ok_or_bad_request("Invalid continuation token")?,
 						)?,
 						fallback_key: None,
@@ -606,7 +606,7 @@ impl ListObjectsQuery {
 					Some("]") => Ok(RangeBegin::AfterKey {
 						key: String::from_utf8(
 							BASE64_STANDARD
-								.decode(token[1..].as_bytes())
+								.decode(&token.as_bytes()[1..])
 								.ok_or_bad_request("Invalid continuation token")?,
 						)?,
 					}),
@@ -725,10 +725,7 @@ impl<K: std::cmp::Ord, V> Accumulator<K, V> {
 		let object = objects.peek().expect("This iterator can not be empty as it is checked earlier in the code. This is a logic bug, please report it.");
 
 		// Check if this is a common prefix (requires a passed delimiter and its value in the key)
-		let pfx = match common_prefix(object, query) {
-			Some(p) => p,
-			None => return None,
-		};
+		let pfx = common_prefix(object, query)?;
 		assert!(pfx.starts_with(&query.prefix));
 
 		// Try to register this prefix
@@ -1017,12 +1014,12 @@ mod tests {
 
 		query.common.prefix = "a/".to_string();
 		assert_eq!(
-			common_prefix(objs.get(0).unwrap(), &query.common),
+			common_prefix(objs.first().unwrap(), &query.common),
 			Some("a/b/")
 		);
 
 		query.common.prefix = "a/b/".to_string();
-		assert_eq!(common_prefix(objs.get(0).unwrap(), &query.common), None);
+		assert_eq!(common_prefix(objs.first().unwrap(), &query.common), None);
 	}
 
 	#[test]
@@ -1043,7 +1040,7 @@ mod tests {
 
 	#[test]
 	fn test_extract_upload() {
-		let objs = vec![
+		let objs = [
 			Object::new(
 				bucket(),
 				"b".to_string(),

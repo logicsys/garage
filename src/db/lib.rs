@@ -17,7 +17,7 @@ use core::ops::{Bound, RangeBounds};
 
 use std::borrow::Cow;
 use std::cell::Cell;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 
 use thiserror::Error;
@@ -133,7 +133,7 @@ impl Db {
 				Err(TxError::Db(tx_e))
 			}
 			(Err(TxError::Db(tx_e)), Some(Ok(_))) => {
-				// Transaction encounterred a DB error when commiting the transaction,
+				// Transaction encounterred a DB error when committing the transaction,
 				// after user code was called
 				Err(TxError::Db(tx_e))
 			}
@@ -147,7 +147,7 @@ impl Db {
 		}
 	}
 
-	pub fn snapshot(&self, path: &PathBuf) -> Result<()> {
+	pub fn snapshot(&self, path: &Path) -> Result<()> {
 		self.0.snapshot(path)
 	}
 
@@ -348,7 +348,7 @@ pub(crate) trait IDb: Send + Sync {
 	fn engine(&self) -> String;
 	fn open_tree(&self, name: &str) -> Result<usize>;
 	fn list_trees(&self) -> Result<Vec<String>>;
-	fn snapshot(&self, path: &PathBuf) -> Result<()>;
+	fn snapshot(&self, path: &Path) -> Result<()>;
 
 	fn get(&self, tree: usize, key: &[u8]) -> Result<Option<Value>>;
 	fn approximate_len(&self, tree: usize) -> Result<usize>;

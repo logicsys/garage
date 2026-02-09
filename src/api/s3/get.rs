@@ -93,7 +93,7 @@ fn object_headers(
 
 /// Override headers according to specific query parameters, see
 /// section "Overriding response header values through the request" in
-/// https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html
+/// <https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html>
 fn getobject_override_headers(
 	overrides: GetObjectOverrides,
 	resp: &mut http::response::Builder,
@@ -124,7 +124,7 @@ fn handle_http_precondition(
 ) -> Result<Option<Response<ResBody>>, Error> {
 	let precondition_headers = PreconditionHeaders::parse(req)?;
 
-	if let Some(status_code) = precondition_headers.check(&version, &version_meta.etag)? {
+	if let Some(status_code) = precondition_headers.check(version, &version_meta.etag)? {
 		Ok(Some(
 			Response::builder()
 				.status(status_code)
@@ -189,12 +189,12 @@ pub async fn handle_head_without_ctx(
 		OekDerivationInfo::for_object(&object, object_version),
 	)?;
 
-	let checksum_mode = checksum_mode(&req);
+	let checksum_mode = checksum_mode(req);
 
-	if let Some(pn) = part_number {
+	if let Some(part_number) = part_number {
 		match version_data {
 			ObjectVersionData::Inline(_, _) => {
-				if pn != 1 {
+				if part_number != 1 {
 					return Err(Error::InvalidPart);
 				}
 				let bytes_len = version_meta.size;
@@ -223,7 +223,7 @@ pub async fn handle_head_without_ctx(
 				check_version_not_deleted(&version)?;
 
 				let (part_offset, part_end) =
-					calculate_part_bounds(&version, pn).ok_or(Error::InvalidPart)?;
+					calculate_part_bounds(&version, part_number).ok_or(Error::InvalidPart)?;
 
 				Ok(object_headers(
 					object_version,
@@ -316,7 +316,16 @@ pub async fn handle_get_without_ctx(
 		OekDerivationInfo::for_object(&object, last_v),
 	)?;
 
-	let checksum_mode = checksum_mode(&req);
+	let checksum_mode = checksum_mode(req);
+
+	let handle_get_info = HandleGetInfo {
+		garage,
+		version: last_v,
+		version_data: last_v_data,
+		version_meta: last_v_meta,
+		encryption: enc,
+		meta_inner: &headers,
+	};
 
 	match (part_number, parse_range_header(req, last_v_meta.size)?) {
 		(Some(_), Some(_)) => Err(Error::bad_request(
@@ -324,12 +333,7 @@ pub async fn handle_get_without_ctx(
 		)),
 		(Some(pn), None) => {
 			handle_get_part(
-				garage,
-				last_v,
-				last_v_data,
-				last_v_meta,
-				enc,
-				&headers,
+				handle_get_info,
 				pn,
 				ChecksumMode {
 					// TODO: for multipart uploads, checksums of each part should be stored
@@ -342,12 +346,7 @@ pub async fn handle_get_without_ctx(
 		}
 		(None, Some(range)) => {
 			handle_get_range(
-				garage,
-				last_v,
-				last_v_data,
-				last_v_meta,
-				enc,
-				&headers,
+				handle_get_info,
 				range.start,
 				range.start + range.length,
 				ChecksumMode {
@@ -359,26 +358,14 @@ pub async fn handle_get_without_ctx(
 			)
 			.await
 		}
-		(None, None) => {
-			handle_get_full(
-				garage,
-				last_v,
-				last_v_data,
-				last_v_meta,
-				enc,
-				&headers,
-				overrides,
-				checksum_mode,
-			)
-			.await
-		}
+		(None, None) => handle_get_full(handle_get_info, overrides, checksum_mode).await,
 	}
 }
 
 pub(crate) fn check_version_not_deleted(version: &Version) -> Result<(), Error> {
 	if version.deleted.get() {
 		// the version was deleted between when the object_table was consulted
-		// and now, this could mean the object was deleted, or overriden.
+		// and now, this could mean the object was deleted, or overridden.
 		// Rather than say the key doesn't exist, return a transient error
 		// to signal the client to try again.
 		return Err(CommonError::InternalError(UtilError::Message(
@@ -390,28 +377,37 @@ pub(crate) fn check_version_not_deleted(version: &Version) -> Result<(), Error> 
 	Ok(())
 }
 
-async fn handle_get_full(
+struct HandleGetInfo<'a> {
 	garage: Arc<Garage>,
-	version: &ObjectVersion,
-	version_data: &ObjectVersionData,
-	version_meta: &ObjectVersionMeta,
+	version: &'a ObjectVersion,
+	version_data: &'a ObjectVersionData,
+	version_meta: &'a ObjectVersionMeta,
 	encryption: EncryptionParams,
-	meta_inner: &ObjectVersionMetaInner,
+	meta_inner: &'a ObjectVersionMetaInner,
+}
+
+async fn handle_get_full(
+	info: HandleGetInfo<'_>,
 	overrides: GetObjectOverrides,
 	checksum_mode: ChecksumMode,
 ) -> Result<Response<ResBody>, Error> {
 	let mut resp_builder = object_headers(
-		version,
-		version_meta,
-		&meta_inner,
-		encryption,
+		info.version,
+		info.version_meta,
+		info.meta_inner,
+		info.encryption,
 		checksum_mode,
 	)
-	.header(CONTENT_LENGTH, format!("{}", version_meta.size))
+	.header(CONTENT_LENGTH, format!("{}", info.version_meta.size))
 	.status(StatusCode::OK);
 	getobject_override_headers(overrides, &mut resp_builder)?;
 
-	let stream = full_object_byte_stream(garage, version, version_data, encryption);
+	let stream = full_object_byte_stream(
+		info.garage,
+		info.version,
+		info.version_data,
+		info.encryption,
+	);
 
 	Ok(resp_builder.body(response_body_from_stream(stream))?)
 }
@@ -491,12 +487,7 @@ pub fn full_object_byte_stream(
 }
 
 async fn handle_get_range(
-	garage: Arc<Garage>,
-	version: &ObjectVersion,
-	version_data: &ObjectVersionData,
-	version_meta: &ObjectVersionMeta,
-	encryption: EncryptionParams,
-	meta_inner: &ObjectVersionMetaInner,
+	info: HandleGetInfo<'_>,
 	begin: u64,
 	end: u64,
 	checksum_mode: ChecksumMode,
@@ -504,18 +495,24 @@ async fn handle_get_range(
 	// Here we do not use getobject_override_headers because we don't
 	// want to add any overridden headers (those should not be added
 	// when returning PARTIAL_CONTENT)
-	let resp_builder = object_headers(version, version_meta, meta_inner, encryption, checksum_mode)
-		.header(CONTENT_LENGTH, format!("{}", end - begin))
-		.header(
-			CONTENT_RANGE,
-			format!("bytes {}-{}/{}", begin, end - 1, version_meta.size),
-		)
-		.status(StatusCode::PARTIAL_CONTENT);
+	let resp_builder = object_headers(
+		info.version,
+		info.version_meta,
+		info.meta_inner,
+		info.encryption,
+		checksum_mode,
+	)
+	.header(CONTENT_LENGTH, format!("{}", end - begin))
+	.header(
+		CONTENT_RANGE,
+		format!("bytes {}-{}/{}", begin, end - 1, info.version_meta.size),
+	)
+	.status(StatusCode::PARTIAL_CONTENT);
 
-	match &version_data {
+	match &info.version_data {
 		ObjectVersionData::DeleteMarker => unreachable!(),
 		ObjectVersionData::Inline(_meta, bytes) => {
-			let bytes = encryption.decrypt_blob(&bytes)?;
+			let bytes = info.encryption.decrypt_blob(bytes)?;
 			if end as usize <= bytes.len() {
 				let body = bytes_body(bytes[begin as usize..end as usize].to_vec().into());
 				Ok(resp_builder.body(body)?)
@@ -526,46 +523,47 @@ async fn handle_get_range(
 			}
 		}
 		ObjectVersionData::FirstBlock(_meta, _first_block_hash) => {
-			let version = garage
+			let version = info
+				.garage
 				.version_table
-				.get(&version.uuid, &EmptyKey)
+				.get(&info.version.uuid, &EmptyKey)
 				.await?
 				.ok_or(Error::NoSuchKey)?;
 			check_version_not_deleted(&version)?;
-			let body =
-				body_from_blocks_range(garage, encryption, version.blocks.items(), begin, end);
+			let body = body_from_blocks_range(
+				info.garage,
+				info.encryption,
+				version.blocks.items(),
+				begin,
+				end,
+			);
 			Ok(resp_builder.body(body)?)
 		}
 	}
 }
 
 async fn handle_get_part(
-	garage: Arc<Garage>,
-	object_version: &ObjectVersion,
-	version_data: &ObjectVersionData,
-	version_meta: &ObjectVersionMeta,
-	encryption: EncryptionParams,
-	meta_inner: &ObjectVersionMetaInner,
+	info: HandleGetInfo<'_>,
 	part_number: u64,
 	checksum_mode: ChecksumMode,
 ) -> Result<Response<ResBody>, Error> {
 	// Same as for get_range, no getobject_override_headers
 	let resp_builder = object_headers(
-		object_version,
-		version_meta,
-		meta_inner,
-		encryption,
+		info.version,
+		info.version_meta,
+		info.meta_inner,
+		info.encryption,
 		checksum_mode,
 	)
 	.status(StatusCode::PARTIAL_CONTENT);
 
-	match version_data {
+	match info.version_data {
 		ObjectVersionData::Inline(_, bytes) => {
 			if part_number != 1 {
 				return Err(Error::InvalidPart);
 			}
-			let bytes = encryption.decrypt_blob(&bytes)?;
-			assert_eq!(bytes.len() as u64, version_meta.size);
+			let bytes = info.encryption.decrypt_blob(bytes)?;
+			assert_eq!(bytes.len() as u64, info.version_meta.size);
 			Ok(resp_builder
 				.header(CONTENT_LENGTH, format!("{}", bytes.len()))
 				.header(
@@ -576,9 +574,10 @@ async fn handle_get_part(
 				.body(bytes_body(bytes.into_owned().into()))?)
 		}
 		ObjectVersionData::FirstBlock(_, _) => {
-			let version = garage
+			let version = info
+				.garage
 				.version_table
-				.get(&object_version.uuid, &EmptyKey)
+				.get(&info.version.uuid, &EmptyKey)
 				.await?
 				.ok_or(Error::NoSuchKey)?;
 
@@ -587,14 +586,19 @@ async fn handle_get_part(
 			let (begin, end) =
 				calculate_part_bounds(&version, part_number).ok_or(Error::InvalidPart)?;
 
-			let body =
-				body_from_blocks_range(garage, encryption, version.blocks.items(), begin, end);
+			let body = body_from_blocks_range(
+				info.garage,
+				info.encryption,
+				version.blocks.items(),
+				begin,
+				end,
+			);
 
 			Ok(resp_builder
 				.header(CONTENT_LENGTH, format!("{}", end - begin))
 				.header(
 					CONTENT_RANGE,
-					format!("bytes {}-{}/{}", begin, end - 1, version_meta.size),
+					format!("bytes {}-{}/{}", begin, end - 1, info.version_meta.size),
 				)
 				.header(X_AMZ_MP_PARTS_COUNT, format!("{}", version.n_parts()?))
 				.body(body)?)
@@ -708,11 +712,7 @@ fn body_from_blocks_range(
 									Some(None)
 								} else {
 									// The chunk has an intersection with the requested range
-									let start_in_chunk = if *chunk_offset > begin {
-										0
-									} else {
-										begin - *chunk_offset
-									};
+									let start_in_chunk = begin.saturating_sub(*chunk_offset);
 									let end_in_chunk = if *chunk_offset + chunk_len < end {
 										chunk_len
 									} else {
@@ -773,10 +773,7 @@ fn error_stream_item<E: std::fmt::Display>(e: E) -> ByteStream {
 }
 
 fn std_error_from_read_error<E: std::fmt::Display>(e: E) -> std::io::Error {
-	std::io::Error::new(
-		std::io::ErrorKind::Other,
-		format!("Error while reading object data: {}", e),
-	)
+	std::io::Error::other(format!("Error while reading object data: {}", e))
 }
 
 // ----
@@ -853,7 +850,9 @@ impl PreconditionHeaders {
 	}
 
 	fn check(&self, v: &ObjectVersion, etag: &str) -> Result<Option<StatusCode>, Error> {
-		let v_date = UNIX_EPOCH + Duration::from_millis(v.timestamp);
+		// we store date with ms precision, but headers are precise to the second: truncate
+		// the timestamp to handle the same-second edge case
+		let v_date = UNIX_EPOCH + Duration::from_secs(v.timestamp / 1000);
 
 		// Implemented from https://datatracker.ietf.org/doc/html/rfc7232#section-6
 

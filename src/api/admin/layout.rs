@@ -143,7 +143,7 @@ impl RequestHandler for GetClusterLayoutHistoryRequest {
 					.iter()
 					.map(|node| {
 						(
-							hex::encode(&node),
+							hex::encode(node),
 							NodeUpdateTrackers {
 								ack: layout.update_trackers.ack_map.get(node, min_stored),
 								sync: layout.update_trackers.sync_map.get(node, min_stored),
@@ -343,14 +343,16 @@ impl RequestHandler for ClusterLayoutSkipDeadNodesRequest {
 		for node in all_nodes.iter() {
 			// Update ACK tracker for dead nodes or for all nodes if --allow-missing-data
 			if self.allow_missing_data || !status.iter().any(|x| x.id == *node && x.is_up) {
-				if layout.update_trackers.ack_map.set_max(*node, self.version) {
+				let ack_changed = layout.update_trackers.ack_map.set_max(*node, self.version);
+				if ack_changed {
 					ack_updated.push(hex::encode(node));
 				}
 			}
 
 			// If --allow-missing-data, update SYNC tracker for all nodes.
 			if self.allow_missing_data {
-				if layout.update_trackers.sync_map.set_max(*node, self.version) {
+				let sync_changed = layout.update_trackers.sync_map.set_max(*node, self.version);
+				if sync_changed {
 					sync_updated.push(hex::encode(node));
 				}
 			}
@@ -380,9 +382,9 @@ impl From<layout::ZoneRedundancy> for ZoneRedundancy {
 	}
 }
 
-impl Into<layout::ZoneRedundancy> for ZoneRedundancy {
-	fn into(self) -> layout::ZoneRedundancy {
-		match self {
+impl From<ZoneRedundancy> for layout::ZoneRedundancy {
+	fn from(val: ZoneRedundancy) -> Self {
+		match val {
 			ZoneRedundancy::Maximum => layout::ZoneRedundancy::Maximum,
 			ZoneRedundancy::AtLeast(x) => layout::ZoneRedundancy::AtLeast(x),
 		}
@@ -397,10 +399,10 @@ impl From<layout::LayoutParameters> for LayoutParameters {
 	}
 }
 
-impl Into<layout::LayoutParameters> for LayoutParameters {
-	fn into(self) -> layout::LayoutParameters {
+impl From<LayoutParameters> for layout::LayoutParameters {
+	fn from(val: LayoutParameters) -> Self {
 		layout::LayoutParameters {
-			zone_redundancy: self.zone_redundancy.into(),
+			zone_redundancy: val.zone_redundancy.into(),
 		}
 	}
 }

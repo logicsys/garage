@@ -173,7 +173,7 @@ impl BlockManager {
 			data_fsync: config.data_fsync,
 			disable_scrub: config.disable_scrub,
 			compression_level: config.compression_level,
-			mutation_lock: vec![(); MUTEX_COUNT]
+			mutation_lock: [(); MUTEX_COUNT]
 				.iter()
 				.map(|_| Mutex::new(BlockManagerLocked()))
 				.collect::<Vec<_>>(),
@@ -344,7 +344,7 @@ impl BlockManager {
 	/// Returns the set of nodes that should store a copy of a given block.
 	/// These are the nodes assigned to the block's hash in the current
 	/// layout version only: since blocks are immutable, we don't need to
-	/// do complex logic when several layour versions are active at once,
+	/// do complex logic when several layout versions are active at once,
 	/// just move them directly to the new nodes.
 	pub(crate) fn storage_nodes_of(&self, hash: &Hash) -> Result<Vec<Uuid>, Error> {
 		let cluster_layout = self.system.cluster_layout();
@@ -569,12 +569,10 @@ impl BlockManager {
 		async {
 			match self.find_block(hash).await {
 				Some(p) => self.read_block_from(hash, &p).await,
-				None => {
-					return Err(Error::Message(format!(
-						"block {:?} not found on node",
-						hash
-					)));
-				}
+				None => Err(Error::Message(format!(
+					"block {:?} not found on node",
+					hash
+				))),
 			}
 		}
 		.bound_record_duration(&self.metrics.block_read_duration)

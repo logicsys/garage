@@ -14,7 +14,7 @@ use crate::util::*;
 
 /// Priority of a request (click to read more about priorities).
 ///
-/// This priority value is used to priorize messages
+/// This priority value is used to prioritize messages
 /// in the send queue of the client, and their responses in the send queue of the
 /// server. Lower values mean higher priority.
 ///
@@ -100,9 +100,9 @@ pub trait Message: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static
 
 // ----
 
-/// The Req<M> is a helper object used to create requests and attach them
+/// The `Req<M>` is a helper object used to create requests and attach them
 /// a stream of data. If the stream is a fixed Bytes and not a ByteStream,
-/// Req<M> is cheaply cloneable to allow the request to be sent to different
+/// `Req<M>` is cheaply cloneable to allow the request to be sent to different
 /// peers (Clone will panic if the stream is a ByteStream).
 pub struct Req<M: Message> {
 	pub(crate) msg: Arc<M>,
@@ -260,7 +260,7 @@ where
 
 // ----
 
-/// The Resp<M> represents a full response from a RPC that may have
+/// The `Resp<M>` represents a full response from a RPC that may have
 /// an attached stream.
 pub struct Resp<M: Message> {
 	pub(crate) _phantom: PhantomData<M>,
@@ -458,11 +458,13 @@ impl ReqEnc {
 }
 
 /// Encoding for responses into a ByteStream:
+///
 /// IF SUCCESS:
 /// - 0: u8
 /// - msg len: u32
 /// - msg [u8; ..]
 /// - the attached stream as the rest of the encoded stream
+///
 /// IF ERROR:
 /// - message length + 1: u8
 /// - error code: u8
@@ -493,10 +495,7 @@ impl RespEnc {
 				(res_stream, order_tag)
 			}
 			Err(err) => {
-				let err = std::io::Error::new(
-					std::io::ErrorKind::Other,
-					format!("netapp error: {}", err),
-				);
+				let err = std::io::Error::other(format!("netapp error: {}", err));
 				(
 					Box::pin(futures::stream::once(async move { Err(err) })),
 					None,

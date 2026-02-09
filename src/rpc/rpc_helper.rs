@@ -162,7 +162,7 @@ impl RpcHelper {
 		endpoint: &Endpoint<M, H>,
 		to: Uuid,
 		msg: N,
-		strat: RequestStrategy<()>,
+		strategy: RequestStrategy<()>,
 	) -> Result<S, Error>
 	where
 		M: Rpc<Response = Result<S, Error>>,
@@ -185,12 +185,12 @@ impl RpcHelper {
 
 		let node_id = to.into();
 		let rpc_call = endpoint
-			.call_streaming(&node_id, msg, strat.rs_priority)
+			.call_streaming(&node_id, msg, strategy.rs_priority)
 			.with_context(Context::current_with_span(span))
 			.record_duration(&self.0.metrics.rpc_duration, &metric_tags);
 
 		let timeout = async {
-			match strat.rs_timeout {
+			match strategy.rs_timeout {
 				Timeout::None => futures::future::pending().await,
 				Timeout::Default => tokio::time::sleep(self.0.rpc_timeout).await,
 				Timeout::Custom(t) => tokio::time::sleep(t).await,
@@ -222,7 +222,7 @@ impl RpcHelper {
 		endpoint: &Endpoint<M, H>,
 		to: &[Uuid],
 		msg: N,
-		strat: RequestStrategy<()>,
+		strategy: RequestStrategy<()>,
 	) -> Result<Vec<(Uuid, Result<S, Error>)>, Error>
 	where
 		M: Rpc<Response = Result<S, Error>>,
@@ -237,7 +237,7 @@ impl RpcHelper {
 
 		let resps = join_all(
 			to.iter()
-				.map(|to| self.call(endpoint, *to, msg.clone(), strat.clone())),
+				.map(|to| self.call(endpoint, *to, msg.clone(), strategy.clone())),
 		)
 		.with_context(Context::current_with_span(span))
 		.await;
@@ -252,7 +252,7 @@ impl RpcHelper {
 		&self,
 		endpoint: &Endpoint<M, H>,
 		msg: N,
-		strat: RequestStrategy<()>,
+		strategy: RequestStrategy<()>,
 	) -> Result<Vec<(Uuid, Result<S, Error>)>, Error>
 	where
 		M: Rpc<Response = Result<S, Error>>,
@@ -266,7 +266,7 @@ impl RpcHelper {
 			.iter()
 			.map(|p| p.id.into())
 			.collect::<Vec<_>>();
-		self.call_many(endpoint, &to[..], msg, strat).await
+		self.call_many(endpoint, &to[..], msg, strategy).await
 	}
 
 	/// Make a RPC call to multiple servers, returning either a Vec of responses,
@@ -336,14 +336,14 @@ impl RpcHelper {
 	{
 		// Once quorum is reached, other requests don't matter.
 		// What we do here is only send the required number of requests
-		// to reach a quorum, priorizing nodes with the lowest latency.
+		// to reach a quorum, prioritizing nodes with the lowest latency.
 		// When there are errors, we start new requests to compensate.
 
 		// TODO: this could be made more aggressive, e.g. if after 2x the
 		// average ping of a given request, the response is not yet received,
 		// preemptively send an additional request to any remaining nodes.
 
-		// Reorder requests to priorize closeness / low latency
+		// Reorder requests to prioritize closeness / low latency
 		let request_order =
 			self.request_order(self.0.layout.read().unwrap().current()?, to.iter().copied());
 		let send_all_at_once = strategy.rs_send_all_at_once.unwrap_or(false);
@@ -540,6 +540,8 @@ impl RpcHelper {
 	// ---- functions not related to MAKING RPCs, but just determining to what nodes
 	//      they should be made and in which order ----
 
+	#[expect(clippy::doc_overindented_list_items)]
+	#[expect(clippy::doc_lazy_continuation)]
 	/// Determine to what nodes, and in what order, requests to read a data block
 	/// should be sent. All nodes in the Vec returned by this function are tried
 	/// one by one until there is one that returns the block (in block/manager.rs).
@@ -558,7 +560,7 @@ impl RpcHelper {
 	///
 	/// 1. ask first all nodes of all currently active layout versions
 	///   -> ask the preferred node in all layout versions (older to newer),
-	///      then the second preferred onde in all verions, etc.
+	///      then the second preferred onde in all versions, etc.
 	///   -> we start by the oldest active layout version first, because a majority
 	///      of blocks will have been saved before the layout change
 	/// 2. ask all nodes of historical layout versions, for blocks which have not
@@ -592,7 +594,7 @@ impl RpcHelper {
 			for i in 0..current_layout.replication_factor {
 				for vn in vernodes.iter() {
 					if let Some(n) = vn.get(i) {
-						if !nodes.contains(&n) {
+						if !nodes.contains(n) {
 							if *n == self.0.our_node_id {
 								// it's always fast (almost free) to ask locally,
 								// so always put that as first choice
@@ -635,8 +637,8 @@ impl RpcHelper {
 		// The tuples are as follows:
 		//         (is another node?, is another zone?, latency, node ID, request future)
 		// We store all of these tuples in a vec that we can sort.
-		// By sorting this vec, we priorize ourself, then nodes in the same zone,
-		// and within a same zone we priorize nodes with the lowest latency.
+		// By sorting this vec, we prioritize ourself, then nodes in the same zone,
+		// and within a same zone we prioritize nodes with the lowest latency.
 		let mut nodes = nodes
 			.map(|to| {
 				let peer_zone = layout.get_node_zone(&to).unwrap_or("");
@@ -654,7 +656,7 @@ impl RpcHelper {
 			})
 			.collect::<Vec<_>>();
 
-		// Sort requests by (priorize ourself, priorize same zone, priorize low latency)
+		// Sort requests by (prioritize ourself, prioritize same zone, prioritize low latency)
 		nodes.sort_by_key(|(diffnode, diffzone, ping, _to)| (*diffnode, *diffzone, *ping));
 
 		nodes

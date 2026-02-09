@@ -26,7 +26,7 @@ in
       s3cmd
       minio-client
       rclone
-      (python312.withPackages (ps: [ ps.boto3 ]))
+      (python313.withPackages (ps: [ ps.boto3 ]))
 
       socat
       psmisc
@@ -34,8 +34,11 @@ in
       openssl
       curl
       jq
+      typos
     ];
     shellHook = ''
+      export AWS_REQUEST_CHECKSUM_CALCULATION='when_required'
+
       function to_s3 {
         AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED AWS_RESPONSE_CHECKSUM_VALIDATION=WHEN_REQUIRED \
         aws \
@@ -49,7 +52,7 @@ in
       function to_docker {
         executor  \
           --force \
-          --customPlatform="$(echo "''${DOCKER_PLATFORM}" | sed 's/i386/386/')" \
+          --custom-platform="$(echo "''${DOCKER_PLATFORM}" | sed 's/i386/386/')" \
           --destination "$(echo "''${CONTAINER_NAME}" | sed 's/i386/386/'):''${CONTAINER_TAG}" \
           --context dir://`pwd` \
           --verbosity=debug

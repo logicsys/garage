@@ -105,7 +105,7 @@ fn check_standard_signature(
 	// Verify that all necessary request headers are included in signed_headers
 	// The following must be included for all signatures:
 	// - the Host header (mandatory)
-	// - all x-amz-* headers used in the request
+	// - all x-amz-* headers used in the request (except x-amz-content-sha256)
 	// AWS also indicates that the Content-Type header should be signed if
 	// it is used, but Minio client doesn't sign it so we don't check it for compatibility.
 	let signed_headers = split_signed_headers(&authorization)?;
@@ -152,7 +152,7 @@ fn check_presigned_signature(
 	// Verify that all necessary request headers are included in signed_headers
 	// For AWSv4 pre-signed URLs, the following must be included:
 	// - the Host header (mandatory)
-	// - all x-amz-* headers used in the request
+	// - all x-amz-* headers used in the request (except x-amz-content-sha256)
 	let signed_headers = split_signed_headers(&authorization)?;
 	verify_signed_headers(request.headers(), &signed_headers)?;
 
@@ -187,7 +187,7 @@ fn check_presigned_signature(
 	let headers_mut = request.headers_mut();
 	for (name, value) in query.iter() {
 		if let Some(existing) = headers_mut.get(name) {
-			if signed_headers.contains(&name) && existing.as_bytes() != value.value.as_bytes() {
+			if signed_headers.contains(name) && existing.as_bytes() != value.value.as_bytes() {
 				return Err(Error::bad_request(format!(
 					"Conflicting values for `{}` in query parameters and request headers",
 					name
@@ -269,16 +269,22 @@ fn verify_signed_headers(headers: &HeaderMap, signed_headers: &[HeaderName]) -> 
 		return Err(Error::bad_request("Header `Host` should be signed"));
 	}
 	for (name, _) in headers.iter() {
-		if name.as_str().starts_with("x-amz-") {
-			if !signed_headers.contains(name) {
-				return Err(Error::bad_request(format!(
-					"Header `{}` should be signed",
-					name
-				)));
-			}
+		// Enforce signature of some headers
+		if header_should_be_signed(name) && !signed_headers.contains(name) {
+			return Err(Error::bad_request(format!(
+				"Header `{}` should be signed",
+				name
+			)));
 		}
 	}
 	Ok(())
+}
+
+// Indicates whether a header is required to be signed
+fn header_should_be_signed(name: &HeaderName) -> bool {
+	// Enforce signature of all x-amz-* headers, except x-amz-content-sh256
+	// because it is included in the canonical request in all cases
+	name.as_str().starts_with("x-amz-") && name != X_AMZ_CONTENT_SHA256
 }
 
 pub fn string_to_sign(datetime: &DateTime<Utc>, scope_string: &str, canonical_req: &str) -> String {
@@ -341,7 +347,7 @@ pub fn canonical_request(
 	let canonical_query_string = {
 		let mut items = Vec::with_capacity(query.len());
 		for (_, QueryValue { key, value }) in query.iter() {
-			items.push(uri_encode(&key, true) + "=" + &uri_encode(&value, true));
+			items.push(uri_encode(key, true) + "=" + &uri_encode(value, true));
 		}
 		items.sort();
 		items.join("&")
@@ -475,8 +481,7 @@ impl Authorization {
 
 		let date = headers
 			.get(X_AMZ_DATE)
-			.ok_or_bad_request("Missing X-Amz-Date field")
-			.map_err(Error::from)?
+			.ok_or_bad_request("Missing X-Amz-Date field")?
 			.to_str()?;
 		let date = parse_date(date)?;
 

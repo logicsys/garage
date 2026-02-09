@@ -371,7 +371,7 @@ impl K2vClient {
 		use sha2::{Digest, Sha256};
 		let mut hasher = Sha256::new();
 		hasher.update(req.body());
-		let hash = hex::encode(&hasher.finalize());
+		let hash = hex::encode(hasher.finalize());
 		req.headers_mut()
 			.insert(AMZ_CONTENT_SHA256, hash.try_into().unwrap());
 
@@ -647,15 +647,15 @@ struct PollRangeResponse {
 }
 
 impl<'a> Filter<'a> {
-	fn query_params(&self) -> Vec<(&'static str, std::borrow::Cow<str>)> {
+	fn query_params(&self) -> Vec<(&'static str, std::borrow::Cow<'_, str>)> {
 		let mut res = Vec::<(&'static str, std::borrow::Cow<str>)>::with_capacity(8);
-		if let Some(start) = self.start.as_deref() {
+		if let Some(start) = self.start {
 			res.push(("start", start.into()));
 		}
-		if let Some(end) = self.end.as_deref() {
+		if let Some(end) = self.end {
 			res.push(("end", end.into()));
 		}
-		if let Some(prefix) = self.prefix.as_deref() {
+		if let Some(prefix) = self.prefix {
 			res.push(("prefix", prefix.into()));
 		}
 		if let Some(limit) = &self.limit {

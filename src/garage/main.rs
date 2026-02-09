@@ -7,7 +7,6 @@ extern crate tracing;
 mod cli;
 mod secrets;
 mod server;
-#[cfg(feature = "telemetry-otlp")]
 mod tracing_setup;
 
 #[cfg(not(any(feature = "bundled-libs", feature = "system-libs")))]
@@ -44,7 +43,7 @@ use secrets::Secrets;
 	about = "S3-compatible object store for self-hosted geo-distributed deployments"
 )]
 struct Opt {
-	/// Host to connect to for admin operations, in the format: <full-node-id>@<ip>:<port>
+	/// Host to connect to for admin operations, in the format: `<full-node-id>@<ip>:<port>`
 	#[structopt(short = "h", long = "rpc-host", env = "GARAGE_RPC_HOST")]
 	pub rpc_host: Option<String>,
 
@@ -68,24 +67,30 @@ struct Opt {
 async fn main() {
 	// Initialize version and features info
 	let features = &[
-		#[cfg(feature = "k2v")]
-		"k2v",
-		#[cfg(feature = "lmdb")]
-		"lmdb",
-		#[cfg(feature = "sqlite")]
-		"sqlite",
-		#[cfg(feature = "consul-discovery")]
-		"consul-discovery",
-		#[cfg(feature = "kubernetes-discovery")]
-		"kubernetes-discovery",
-		#[cfg(feature = "metrics")]
-		"metrics",
-		#[cfg(feature = "telemetry-otlp")]
-		"telemetry-otlp",
 		#[cfg(feature = "bundled-libs")]
 		"bundled-libs",
+		#[cfg(feature = "consul-discovery")]
+		"consul-discovery",
+		#[cfg(feature = "fjall")]
+		"fjall",
+		#[cfg(feature = "journald")]
+		"journald",
+		#[cfg(feature = "k2v")]
+		"k2v",
+		#[cfg(feature = "kubernetes-discovery")]
+		"kubernetes-discovery",
+		#[cfg(feature = "lmdb")]
+		"lmdb",
+		#[cfg(feature = "metrics")]
+		"metrics",
+		#[cfg(feature = "sqlite")]
+		"sqlite",
+		#[cfg(feature = "syslog")]
+		"syslog",
 		#[cfg(feature = "system-libs")]
 		"system-libs",
+		#[cfg(feature = "telemetry-otlp")]
+		"telemetry-otlp",
 	][..];
 	if let Some(git_version) = option_env!("GIT_VERSION") {
 		garage_util::version::init_version(git_version);

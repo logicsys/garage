@@ -62,7 +62,7 @@ pub(crate) trait RecvLoop: Sync + 'static {
 			trace!(
 				"recv_loop({}): in_progress = {:?}",
 				debug_name,
-				streams.iter().map(|(id, _)| id).collect::<Vec<_>>()
+				streams.keys().collect::<Vec<_>>()
 			);
 
 			let mut header_id = [0u8; RequestID::BITS as usize / 8];
@@ -79,10 +79,7 @@ pub(crate) trait RecvLoop: Sync + 'static {
 
 			if size == CANCEL_REQUEST {
 				if let Some(mut stream) = streams.remove(&id) {
-					let _ = stream.send(Err(std::io::Error::new(
-						std::io::ErrorKind::Other,
-						"netapp: cancel requested",
-					)));
+					stream.send(Err(std::io::Error::other("netapp: cancel requested")));
 					stream.end();
 				}
 				self.cancel_handler(id);
@@ -92,7 +89,7 @@ pub(crate) trait RecvLoop: Sync + 'static {
 			let has_cont = (size & CHUNK_FLAG_HAS_CONTINUATION) != 0;
 			let is_error = (size & CHUNK_FLAG_ERROR) != 0;
 			let size = (size & CHUNK_LENGTH_MASK) as usize;
-			let mut next_slice = vec![0; size as usize];
+			let mut next_slice = vec![0; size];
 			read.read_exact(&mut next_slice[..]).await?;
 
 			let packet = if is_error {
@@ -135,7 +132,7 @@ pub(crate) trait RecvLoop: Sync + 'static {
 				// If we cannot put packet in channel, it means that the
 				// receiving end of the channel is disconnected.
 				// We still need to reach eos before dropping this sender
-				let _ = sender.send(packet);
+				sender.send(packet);
 			}
 
 			if has_cont {

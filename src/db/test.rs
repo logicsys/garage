@@ -21,7 +21,7 @@ fn test_suite(db: Db) {
 	let res = db.transaction::<_, (), _>(|tx| {
 		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), va);
 
-		assert_eq!(tx.insert(&tree, ka, vb).unwrap(), ());
+		let _: () = tx.insert(&tree, ka, vb).unwrap();
 
 		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), vb);
 
@@ -33,7 +33,7 @@ fn test_suite(db: Db) {
 	let res = db.transaction::<(), _, _>(|tx| {
 		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), vb);
 
-		assert_eq!(tx.insert(&tree, ka, vc).unwrap(), ());
+		let _: () = tx.insert(&tree, ka, vc).unwrap();
 
 		assert_eq!(tx.get(&tree, ka).unwrap().unwrap(), vc);
 
@@ -130,10 +130,12 @@ fn test_lmdb_db() {
 	use crate::lmdb_adapter::LmdbDb;
 
 	let path = mktemp::Temp::new_dir().unwrap();
-	let db = heed::EnvOpenOptions::new()
-		.max_dbs(100)
-		.open(&path)
-		.unwrap();
+	let db = unsafe {
+		heed::EnvOpenOptions::new()
+			.max_dbs(100)
+			.open(&path)
+			.unwrap()
+	};
 	let db = LmdbDb::init(db);
 	test_suite(db);
 	drop(path);
@@ -145,7 +147,7 @@ fn test_sqlite_db() {
 	use crate::sqlite_adapter::SqliteDb;
 
 	let manager = r2d2_sqlite::SqliteConnectionManager::memory();
-	let db = SqliteDb::new(manager, false).unwrap();
+	let db = SqliteDb::open(manager, false).unwrap();
 	test_suite(db);
 }
 

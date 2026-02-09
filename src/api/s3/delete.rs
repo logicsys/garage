@@ -29,7 +29,7 @@ async fn handle_delete_internal(ctx: &ReqCtx, key: &str) -> Result<(Uuid, Uuid),
 		.iter()
 		.rev()
 		.find(|v| !matches!(&v.state, ObjectVersionState::Aborted))
-		.or_else(|| object.versions().iter().rev().next());
+		.or_else(|| object.versions().iter().next_back());
 	let deleted_version = match deleted_version {
 		Some(dv) => dv.uuid,
 		None => {
@@ -139,11 +139,7 @@ fn parse_delete_objects_xml(xml: &roxmltree::Document) -> Option<DeleteRequest> 
 				key: key_str.to_string(),
 			});
 		} else if item.has_tag_name("Quiet") {
-			if item.text()? == "true" {
-				ret.quiet = true;
-			} else {
-				ret.quiet = false;
-			}
+			ret.quiet = item.text()? == "true";
 		} else {
 			return None;
 		}

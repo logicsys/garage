@@ -94,10 +94,7 @@ impl EncryptionParams {
 		// data blocks are reused as-is. Since Garage v2, we are using
 		// object-specific encryption keys, so we know that if both source
 		// and destination are encrypted, it can't be with the same key.
-		match (a, b) {
-			(Self::Plaintext, Self::Plaintext) => true,
-			_ => false,
-		}
+		matches!((a, b), (Self::Plaintext, Self::Plaintext))
 	}
 
 	pub fn new_from_headers(
@@ -124,7 +121,7 @@ impl EncryptionParams {
 
 	pub fn add_response_headers(&self, resp: &mut http::response::Builder) {
 		if let Self::SseC { client_key_md5, .. } = self {
-			let md5 = BASE64_STANDARD.encode(&client_key_md5);
+			let md5 = BASE64_STANDARD.encode(client_key_md5);
 
 			resp.headers_mut().unwrap().insert(
 				X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM,
@@ -196,7 +193,7 @@ impl EncryptionParams {
 						None
 					},
 				};
-				let plaintext = enc.decrypt_blob(&inner)?;
+				let plaintext = enc.decrypt_blob(inner)?;
 				let inner = ObjectVersionMetaInner::decode(&plaintext)
 					.ok_or_internal_error("Could not decode encrypted metadata")?;
 				Ok((enc, Cow::Owned(inner)))
@@ -248,7 +245,7 @@ impl EncryptionParams {
 				// So we just put some random bytes.
 				let mut random = [0u8; 16];
 				OsRng.fill_bytes(&mut random);
-				hex::encode(&random)
+				hex::encode(random)
 			}
 		}
 	}
@@ -263,12 +260,12 @@ impl EncryptionParams {
 			Self::SseC {
 				object_key: Some(oek),
 				..
-			} => Some(Aes256Gcm::new(&oek)),
+			} => Some(Aes256Gcm::new(oek)),
 			Self::SseC {
 				client_key,
 				object_key: None,
 				..
-			} => Some(Aes256Gcm::new(&client_key)),
+			} => Some(Aes256Gcm::new(client_key)),
 			Self::Plaintext => None,
 		}
 	}
@@ -433,7 +430,7 @@ fn parse_request_headers(
 			let key_b64 =
 				key.ok_or_bad_request("Missing server-side-encryption-customer-key header")?;
 			let key_bytes: [u8; 32] = BASE64_STANDARD
-				.decode(&key_b64)
+				.decode(key_b64)
 				.ok_or_bad_request(
 					"Invalid server-side-encryption-customer-key header: invalid base64",
 				)?
@@ -445,7 +442,7 @@ fn parse_request_headers(
 
 			let md5_b64 =
 				md5.ok_or_bad_request("Missing server-side-encryption-customer-key-md5 header")?;
-			let md5_bytes = BASE64_STANDARD.decode(&md5_b64).ok_or_bad_request(
+			let md5_bytes = BASE64_STANDARD.decode(md5_b64).ok_or_bad_request(
 				"Invalid server-side-encryption-customer-key-md5 header: invalid bass64",
 			)?;
 
@@ -511,6 +508,7 @@ struct DecryptStream {
 	state: DecryptStreamState,
 }
 
+#[expect(clippy::large_enum_variant)]
 enum DecryptStreamState {
 	Starting,
 	Running(DecryptorLE31<Aes256Gcm>),
@@ -547,7 +545,7 @@ impl Stream for DecryptStream {
 			let nonce_size = StreamNonceSize::to_usize();
 			if let Some(nonce) = this.buf.take_exact(nonce_size) {
 				let nonce = Nonce::from_slice(nonce.as_ref());
-				*this.state = DecryptStreamState::Running(DecryptorLE31::new(&this.key, nonce));
+				*this.state = DecryptStreamState::Running(DecryptorLE31::new(this.key, nonce));
 				break;
 			}
 
@@ -587,8 +585,7 @@ impl Stream for DecryptStream {
 
 		if matches!(this.state, DecryptStreamState::Done) {
 			if !this.buf.is_empty() {
-				return Poll::Ready(Some(Err(std::io::Error::new(
-					std::io::ErrorKind::Other,
+				return Poll::Ready(Some(Err(std::io::Error::other(
 					"Decrypt: unexpected bytes after last encrypted chunk",
 				))));
 			}
@@ -622,10 +619,7 @@ impl Stream for DecryptStream {
 		match res {
 			Ok(bytes) if bytes.is_empty() => Poll::Ready(None),
 			Ok(bytes) => Poll::Ready(Some(Ok(bytes.into()))),
-			Err(_) => Poll::Ready(Some(Err(std::io::Error::new(
-				std::io::ErrorKind::Other,
-				"Decryption failed",
-			)))),
+			Err(_) => Poll::Ready(Some(Err(std::io::Error::other("Decryption failed")))),
 		}
 	}
 }

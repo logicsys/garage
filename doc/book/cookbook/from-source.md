@@ -20,12 +20,12 @@ sudo apt-get update
 sudo apt-get install build-essential
 ```
 
-## Building from source from the Gitea repository
+## Building from source from the Forgejo repository
 
 The primary location for Garage's source code is the
-[Gitea repository](https://git.deuxfleurs.fr/Deuxfleurs/garage),
+[Forgejo repository](https://git.deuxfleurs.fr/Deuxfleurs/garage),
 which contains all of the released versions as well as the code
-for the developpement of the next version.
+for the development of the next version.
 
 Clone the repository and enter it as follows:
 
@@ -41,7 +41,7 @@ git tag  				# List available tags
 git checkout v0.8.0		# Change v0.8.0 with the version you wish to build
 ```
 
-Otherwise you will be building a developpement build from the `main` branch
+Otherwise you will be building a development build from the `main` branch
 that includes all of the changes to be released in the next version.
 Be careful that such a build might be unstable or contain bugs,
 and could be incompatible with nodes that run stable versions of Garage.
@@ -85,11 +85,14 @@ The following feature flags are available in v0.8.0:
 | Feature flag | Enabled | Description |
 | ------------ | ------- | ----------- |
 | `bundled-libs` | *by default* | Use bundled version of sqlite3, zstd, lmdb and libsodium |
-| `system-libs` | optional | Use system version of sqlite3, zstd, lmdb and libsodium<br>if available (exclusive with `bundled-libs`, build using<br>`cargo build --no-default-features --features system-libs`) |
+| `consul-discovery` | optional | Enable automatic registration and discovery<br>of cluster nodes through the Consul API |
+| `fjall` | experimental | Enable using Fjall to store Garage's metadata |
+| `journald` | optional | Enable logging to systemd-journald with<br>`GARAGE_LOG_TO_JOURNALD=true` environment variable set |
 | `k2v` | optional | Enable the experimental K2V API (if used, all nodes on your<br>Garage cluster must have it enabled as well) |
 | `kubernetes-discovery` | optional | Enable automatic registration and discovery<br>of cluster nodes through the Kubernetes API |
-| `metrics` | *by default* | Enable collection of metrics in Prometheus format on the admin API |
-| `telemetry-otlp` | optional | Enable collection of execution traces using OpenTelemetry |
-| `syslog` | optional | Enable logging to Syslog |
 | `lmdb` | *by default* | Enable using LMDB to store Garage's metadata |
+| `metrics` | *by default* | Enable collection of metrics in Prometheus format on the admin API |
 | `sqlite` | *by default* | Enable using Sqlite3 to store Garage's metadata |
+| `syslog` | optional | Enable logging to Syslog with<br>`GARAGE_LOG_TO_SYSLOG=true` environment variable set |
+| `system-libs` | optional | Use system version of sqlite3, zstd, lmdb and libsodium<br>if available (exclusive with `bundled-libs`, build using<br>`cargo build --no-default-features --features system-libs`) |
+| `telemetry-otlp` | optional | Enable collection of execution traces using OpenTelemetry |

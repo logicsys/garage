@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::{Db, Error, Result};
 
@@ -25,20 +25,13 @@ impl Engine {
 	}
 
 	/// Return engine-specific DB path from base path
-	pub fn db_path(&self, base_path: &PathBuf) -> PathBuf {
-		let mut ret = base_path.clone();
-		match self {
-			Self::Lmdb => {
-				ret.push("db.lmdb");
-			}
-			Self::Sqlite => {
-				ret.push("db.sqlite");
-			}
-			Self::Fjall => {
-				ret.push("db.fjall");
-			}
-		}
-		ret
+	pub fn db_path(&self, base_path: &Path) -> PathBuf {
+		let suffix = match self {
+			Self::Lmdb => "db.lmdb",
+			Self::Sqlite => "db.sqlite",
+			Self::Fjall => "db.fjall",
+		};
+		base_path.join(suffix)
 	}
 }
 
@@ -68,20 +61,11 @@ impl std::str::FromStr for Engine {
 	}
 }
 
+#[derive(Default)]
 pub struct OpenOpt {
 	pub fsync: bool,
 	pub lmdb_map_size: Option<usize>,
 	pub fjall_block_cache_size: Option<usize>,
-}
-
-impl Default for OpenOpt {
-	fn default() -> Self {
-		Self {
-			fsync: false,
-			lmdb_map_size: None,
-			fjall_block_cache_size: None,
-		}
-	}
 }
 
 pub fn open_db(path: &PathBuf, engine: Engine, opt: &OpenOpt) -> Result<Db> {
