@@ -235,13 +235,14 @@ mod v2 {
 }
 
 mod v3 {
-	use crate::{bucket_table::v2, permission::BucketKeyPerm};
+	use crate::{bucket_table::v2, permission::BucketKeyPerm, s3::anonymous_access};
 	use garage_util::crdt;
 	use garage_util::data::Uuid;
 	use serde::{Deserialize, Serialize};
 
 	use super::v08;
 
+	pub use anonymous_access::AnonymousMethod;
 	pub use v08::{BucketQuotas, CorsRule, LifecycleExpiration, LifecycleFilter, LifecycleRule};
 	pub use v2::{Redirect, RedirectAll, RedirectCondition, RoutingRule, WebsiteConfig};
 
@@ -277,7 +278,7 @@ mod v3 {
 		pub website_config: crdt::Lww<Option<WebsiteConfig>>,
 		/// CORS rules
 		pub cors_config: crdt::Lww<Option<Vec<CorsRule>>>,
-		pub anonymous_access: crdt::Lww<bool>,
+		pub anonymous_access: crdt::Lww<Option<Vec<AnonymousMethod>>>,
 		/// Lifecycle configuration
 		pub lifecycle_config: crdt::Lww<Option<Vec<LifecycleRule>>>,
 		/// Bucket quotas
@@ -306,10 +307,20 @@ mod v3 {
 						})
 					}),
 					cors_config: x.cors_config,
-					anonymous_access: crdt::Lww::new(false),
+					anonymous_access: crdt::Lww::new(None),
 					lifecycle_config: x.lifecycle_config,
 					quotas: x.quotas,
 				}),
+			}
+		}
+	}
+
+	impl BucketParams {
+		/// Checks whether all anonymous access methods are allowed on the bucket
+		pub fn has_anonymous_methods(&self, methods: &[AnonymousMethod]) -> bool {
+			match self.anonymous_access.get() {
+				None => false,
+				Some(allowed) => methods.iter().all(|m| allowed.contains(m)),
 			}
 		}
 	}
@@ -331,7 +342,7 @@ impl BucketParams {
 			local_aliases: crdt::LwwMap::new(),
 			website_config: crdt::Lww::new(None),
 			cors_config: crdt::Lww::new(None),
-			anonymous_access: crdt::Lww::new(false),
+			anonymous_access: crdt::Lww::new(None),
 			lifecycle_config: crdt::Lww::new(None),
 			quotas: crdt::Lww::new(BucketQuotas::default()),
 		}
