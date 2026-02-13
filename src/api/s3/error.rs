@@ -87,6 +87,18 @@ pub enum Error {
 	/// The client sent a request for an action not supported by garage
 	#[error("Unimplemented action: {0}")]
 	NotImplemented(String),
+
+	/// The object is locked by Object Lock
+	#[error("Object is locked: {0}")]
+	ObjectLocked(String),
+
+	/// Object Lock configuration not found
+	#[error("Object Lock configuration not found for this bucket")]
+	ObjectLockConfigurationNotFound,
+
+	/// Invalid retention configuration
+	#[error("Invalid retention: {0}")]
+	InvalidRetention(String),
 }
 
 commonErrorDerivative!(Error);
@@ -153,6 +165,9 @@ impl Error {
 			Error::InvalidDigest(_) => "InvalidDigest",
 			Error::InvalidUtf8Str(_) | Error::InvalidUtf8String(_) => "InvalidRequest",
 			Error::InvalidEncryptionAlgorithm(_) => "InvalidEncryptionAlgorithmError",
+			Error::ObjectLocked(_) => "AccessDenied",
+			Error::ObjectLockConfigurationNotFound => "ObjectLockConfigurationNotFoundError",
+			Error::InvalidRetention(_) => "InvalidArgument",
 		}
 	}
 }
@@ -166,6 +181,8 @@ impl ApiError for Error {
 			Error::PreconditionFailed => StatusCode::PRECONDITION_FAILED,
 			Error::InvalidRange(_) => StatusCode::RANGE_NOT_SATISFIABLE,
 			Error::NotImplemented(_) => StatusCode::NOT_IMPLEMENTED,
+			Error::ObjectLocked(_) => StatusCode::FORBIDDEN,
+			Error::ObjectLockConfigurationNotFound => StatusCode::NOT_FOUND,
 			Error::AuthorizationHeaderMalformed(_)
 			| Error::InvalidPart
 			| Error::InvalidPartOrder
@@ -174,7 +191,8 @@ impl ApiError for Error {
 			| Error::InvalidEncryptionAlgorithm(_)
 			| Error::InvalidXml(_)
 			| Error::InvalidUtf8Str(_)
-			| Error::InvalidUtf8String(_) => StatusCode::BAD_REQUEST,
+			| Error::InvalidUtf8String(_)
+			| Error::InvalidRetention(_) => StatusCode::BAD_REQUEST,
 		}
 	}
 

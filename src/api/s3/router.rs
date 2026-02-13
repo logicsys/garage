@@ -606,7 +606,6 @@ impl Endpoint {
 				GetObject,
 				GetObjectAcl,
 				GetObjectLegalHold,
-				GetObjectLockConfiguration,
 				GetObjectRetention,
 				GetObjectTagging,
 				GetObjectTorrent,
@@ -636,6 +635,8 @@ impl Endpoint {
 				GetBucketCors,
 				PutBucketCors,
 				DeleteBucketCors,
+				GetObjectLockConfiguration,
+				PutObjectLockConfiguration,
 			]
 		};
 		if readonly {
@@ -925,7 +926,7 @@ mod tests {
 			GET "/my-image.jpg?versionId=3/L4kqtJlcpXroDVBH40Nr8X8gdRQBpUMLUo&acl" => GetObjectAcl
 			GET "/{Key+}?acl&versionId=VersionId" => GetObjectAcl
 			GET "/{Key+}?legal-hold&versionId=VersionId" => GetObjectLegalHold
-			GET "/?object-lock" => GetObjectLockConfiguration
+			OWNER_GET "/?object-lock" => GetObjectLockConfiguration
 			GET "/{Key+}?retention&versionId=VersionId" => GetObjectRetention
 			GET "/example-object?tagging" => GetObjectTagging
 			GET "/{Key+}?tagging&versionId=VersionId" => GetObjectTagging
@@ -997,7 +998,7 @@ mod tests {
 			PUT "/my-image.jpg?acl&versionId=3HL4kqtJlcpXroDTDmJ+rmSpXd3dIbrHY+MTRCxf3vjVBH40Nrjfkd" => PutObjectAcl
 			PUT "/{Key+}?acl&versionId=VersionId" => PutObjectAcl
 			PUT "/{Key+}?legal-hold&versionId=VersionId" => PutObjectLegalHold
-			PUT "/?object-lock" => PutObjectLockConfiguration
+			OWNER_PUT "/?object-lock" => PutObjectLockConfiguration
 			PUT "/{Key+}?retention&versionId=VersionId" => PutObjectRetention
 			PUT "/object-key?tagging" => PutObjectTagging
 			PUT "/{Key+}?tagging&versionId=VersionId" => PutObjectTagging

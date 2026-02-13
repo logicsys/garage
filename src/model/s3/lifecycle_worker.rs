@@ -288,6 +288,10 @@ async fn process_object(
 		}
 
 		if let Some(expire) = &rule.expiration {
+			// Skip locked objects
+			if object.is_locked() {
+				continue;
+			}
 			if let Some(current_version) = object.versions().iter().rev().find(|v| v.is_data()) {
 				let version_date = next_date(current_version.timestamp);
 
@@ -388,7 +392,7 @@ fn check_size_filter(version_data: &ObjectVersionData, filter: &LifecycleFilter)
 	true
 }
 
-fn midnight_ts(date: NaiveDate, use_local_tz: bool) -> u64 {
+pub fn midnight_ts(date: NaiveDate, use_local_tz: bool) -> u64 {
 	let midnight = date.and_hms_opt(0, 0, 0).expect("midnight does not exist");
 	if use_local_tz {
 		return midnight
@@ -408,7 +412,7 @@ fn next_date(ts: u64) -> NaiveDate {
 		.expect("no next day")
 }
 
-fn today(use_local_tz: bool) -> NaiveDate {
+pub fn today(use_local_tz: bool) -> NaiveDate {
 	if use_local_tz {
 		return Local::now().naive_local().date();
 	}

@@ -22,6 +22,7 @@ use crate::s3::block_ref_table::*;
 use crate::s3::lifecycle_worker;
 use crate::s3::mpu_table::*;
 use crate::s3::object_table::*;
+use crate::s3::version_pruning_worker;
 use crate::s3::version_table::*;
 
 use crate::admin_token_table::*;
@@ -78,6 +79,9 @@ pub struct Garage {
 
 	/// Persister for lifecycle worker info
 	pub lifecycle_persister: PersisterShared<lifecycle_worker::LifecycleWorkerPersisted>,
+	/// Persister for version pruning worker info
+	pub version_pruning_persister:
+		PersisterShared<version_pruning_worker::VersionPruningWorkerPersisted>,
 
 	#[cfg(feature = "k2v")]
 	pub k2v: GarageK2V,
@@ -243,6 +247,11 @@ impl Garage {
 			PersisterShared::new(&system.metadata_dir, "lifecycle_worker_state");
 		lifecycle_worker::register_bg_vars(&lifecycle_persister, &mut bg_vars);
 
+		info!("Load version pruning worker state...");
+		let version_pruning_persister =
+			PersisterShared::new(&system.metadata_dir, "version_pruning_worker_state");
+		version_pruning_worker::register_bg_vars(&version_pruning_persister, &mut bg_vars);
+
 		// ---- K2V ----
 		#[cfg(feature = "k2v")]
 		let k2v = GarageK2V::new(system.clone(), &db, meta_rep_param);
@@ -275,6 +284,7 @@ impl Garage {
 			version_table,
 			block_ref_table,
 			lifecycle_persister,
+			version_pruning_persister,
 			#[cfg(feature = "k2v")]
 			k2v,
 		}))
@@ -298,6 +308,11 @@ impl Garage {
 		bg.spawn_worker(lifecycle_worker::LifecycleWorker::new(
 			self.clone(),
 			self.lifecycle_persister.clone(),
+		));
+
+		bg.spawn_worker(version_pruning_worker::VersionPruningWorker::new(
+			self.clone(),
+			self.version_pruning_persister.clone(),
 		));
 
 		#[cfg(feature = "k2v")]

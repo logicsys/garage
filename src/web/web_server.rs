@@ -431,7 +431,7 @@ async fn handle_inner(
 
 		let mut ret = match *req.method() {
 			Method::HEAD => {
-				handle_head_without_ctx(garage, &cleaned_req, bucket_id, key, None).await?
+				handle_head_without_ctx(garage, &cleaned_req, bucket_id, key, None, None).await?
 			}
 			Method::GET => {
 				handle_get_without_ctx(
@@ -441,6 +441,7 @@ async fn handle_inner(
 					key,
 					None,
 					Default::default(),
+					None,
 				)
 				.await?
 			}
@@ -452,9 +453,12 @@ async fn handle_inner(
 		Ok(ret)
 	} else {
 		match *req.method() {
-			Method::HEAD => handle_head_without_ctx(garage, req, bucket_id, key, None).await,
+			Method::HEAD => {
+				handle_head_without_ctx(garage, req, bucket_id, key, None, None).await
+			}
 			Method::GET => {
-				handle_get_without_ctx(garage, req, bucket_id, key, None, Default::default()).await
+				handle_get_without_ctx(garage, req, bucket_id, key, None, Default::default(), None)
+					.await
 			}
 			_ => Err(ApiError::bad_request("HTTP method not supported")),
 		}

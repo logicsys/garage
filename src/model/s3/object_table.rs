@@ -388,6 +388,21 @@ mod v2 {
 	use super::v010;
 	pub use v010::{ChecksumAlgorithm, ChecksumValue};
 
+	/// Retention settings for a specific object version
+	#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize, Deserialize)]
+	pub struct ObjectRetention {
+		pub mode: ObjectRetentionMode,
+		/// Retain until timestamp in milliseconds
+		pub retain_until: u64,
+	}
+
+	/// Object retention mode
+	#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize, Deserialize)]
+	pub enum ObjectRetentionMode {
+		Governance,
+		Compliance,
+	}
+
 	/// An object
 	#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 	pub struct Object {
@@ -399,6 +414,14 @@ mod v2 {
 
 		/// The list of currently stored versions of the object
 		pub(super) versions: Vec<ObjectVersion>,
+
+		/// Object Lock: retention settings
+		#[serde(default)]
+		pub retention: garage_table::crdt::Lww<Option<ObjectRetention>>,
+
+		/// Object Lock: legal hold
+		#[serde(default)]
+		pub legal_hold: garage_table::crdt::Lww<Option<bool>>,
 	}
 
 	/// Information about a version of an object
@@ -512,6 +535,8 @@ mod v2 {
 				bucket_id: old.bucket_id,
 				key: old.key,
 				versions: old.versions.into_iter().map(migrate_version).collect(),
+				retention: garage_table::crdt::Lww::new(None),
+				legal_hold: garage_table::crdt::Lww::new(None),
 			}
 		}
 	}
@@ -604,12 +629,28 @@ impl Object {
 			bucket_id,
 			key,
 			versions: vec![],
+			retention: crdt::Lww::raw(0, None),
+			legal_hold: crdt::Lww::raw(0, None),
 		};
 		for v in versions {
 			ret.add_version(v)
 				.expect("Twice the same ObjectVersion in Object constructor");
 		}
 		ret
+	}
+
+	/// Check if the object is locked (has active retention or legal hold)
+	pub fn is_locked(&self) -> bool {
+		if let Some(true) = self.legal_hold.get() {
+			return true;
+		}
+		if let Some(retention) = self.retention.get() {
+			let now = garage_util::time::now_msec();
+			if now < retention.retain_until {
+				return true;
+			}
+		}
+		false
 	}
 
 	/// Adds a version if it wasn't already present
@@ -735,19 +776,24 @@ impl Crdt for Object {
 			}
 		}
 
-		// Remove versions which are obsolete, i.e. those that come
-		// before the last version which .is_complete().
-		let last_complete = self
+		// Remove non-complete versions (Uploading/Aborted) that are older than
+		// the last complete version. Keep ALL complete versions to support
+		// S3 object versioning.
+		let last_complete_key = self
 			.versions
 			.iter()
-			.enumerate()
 			.rev()
-			.find(|(_, v)| v.is_complete())
-			.map(|(vi, _)| vi);
-
-		if let Some(last_vi) = last_complete {
-			self.versions = self.versions.drain(last_vi..).collect::<Vec<_>>();
+			.find(|v| v.is_complete())
+			.map(|v| v.cmp_key());
+		if let Some(last_key) = last_complete_key {
+			self.versions.retain(|v| {
+				v.is_complete() || v.cmp_key() >= last_key
+			});
 		}
+
+		// Merge object lock fields
+		self.retention.merge(&other.retention);
+		self.legal_hold.merge(&other.legal_hold);
 	}
 }
 
@@ -783,6 +829,58 @@ impl TableSchema for ObjectTable {
 		old: Option<&Self::E>,
 		new: Option<&Self::E>,
 	) -> db::TxOpResult<()> {
+		// ---- Lock safety checks ----
+		if let (Some(old_v), Some(new_v)) = (old, new) {
+			// Check A: Prevent version abortion on locked objects.
+			// If a data version (Complete + non-DeleteMarker) transitions to Aborted
+			// in the merged entry, and the merged object is locked, reject.
+			if new_v.is_locked() {
+				for v in old_v.versions.iter() {
+					if !v.is_data() {
+						continue;
+					}
+					let new_state = new_v
+						.versions
+						.binary_search_by(|nv| nv.cmp_key().cmp(&v.cmp_key()))
+						.ok()
+						.map(|i| &new_v.versions[i].state);
+					if new_state == Some(&ObjectVersionState::Aborted) {
+						return Err(db::TxOpError::new(
+							"cannot abort version: object is locked",
+						));
+					}
+				}
+			}
+
+			// Check B: Prevent compliance retention weakening.
+			// If old has active compliance retention, reject if new has no retention,
+			// non-compliance mode, or shorter retain_until.
+			if let Some(old_ret) = old_v.retention.get() {
+				let now = garage_util::time::now_msec();
+				if old_ret.mode == ObjectRetentionMode::Compliance && now < old_ret.retain_until {
+					match new_v.retention.get() {
+						None => {
+							return Err(db::TxOpError::new(
+								"cannot remove active compliance retention",
+							));
+						}
+						Some(new_ret) => {
+							if new_ret.mode != ObjectRetentionMode::Compliance {
+								return Err(db::TxOpError::new(
+									"cannot change active compliance retention to another mode",
+								));
+							}
+							if new_ret.retain_until < old_ret.retain_until {
+								return Err(db::TxOpError::new(
+									"cannot shorten active compliance retention period",
+								));
+							}
+						}
+					}
+				}
+			}
+		}
+
 		// 1. Count
 		let counter_res = self.object_counter_table.count(tx, old, new);
 		if let Err(e) = db::unabort(counter_res)? {
@@ -865,7 +963,12 @@ impl TableSchema for ObjectTable {
 
 	fn matches_filter(entry: &Self::E, filter: &Self::Filter) -> bool {
 		match filter {
-			ObjectFilter::IsData => entry.versions.iter().any(|v| v.is_data()),
+			ObjectFilter::IsData => entry
+				.versions
+				.iter()
+				.rev()
+				.find(|v| v.is_complete())
+				.map_or(false, |v| v.is_data()),
 			ObjectFilter::IsUploading { check_multipart } => entry
 				.versions
 				.iter()

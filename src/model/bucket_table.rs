@@ -129,6 +129,37 @@ mod v2 {
 
 	pub use v08::{BucketQuotas, CorsRule, LifecycleExpiration, LifecycleFilter, LifecycleRule};
 
+	/// Versioning state for a bucket
+	#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize, Deserialize, Default)]
+	pub enum BucketVersioning {
+		#[default]
+		Unversioned,
+		Enabled,
+		Suspended,
+	}
+
+	/// Object Lock configuration for a bucket
+	#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize, Deserialize)]
+	pub struct ObjectLockConfiguration {
+		pub enabled: bool,
+		pub default_retention: Option<ObjectLockRetention>,
+	}
+
+	/// Default retention configuration for Object Lock
+	#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize, Deserialize)]
+	pub struct ObjectLockRetention {
+		pub mode: ObjectLockRetentionMode,
+		pub days: Option<u64>,
+		pub years: Option<u64>,
+	}
+
+	/// Object Lock retention mode
+	#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize, Deserialize)]
+	pub enum ObjectLockRetentionMode {
+		Governance,
+		Compliance,
+	}
+
 	#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 	pub struct Bucket {
 		/// ID of the bucket
@@ -165,6 +196,12 @@ mod v2 {
 		pub lifecycle_config: crdt::Lww<Option<Vec<LifecycleRule>>>,
 		/// Bucket quotas
 		pub quotas: crdt::Lww<BucketQuotas>,
+		/// Bucket versioning state
+		#[serde(default)]
+		pub versioning: crdt::Lww<BucketVersioning>,
+		/// Object Lock configuration
+		#[serde(default)]
+		pub object_lock_config: crdt::Lww<Option<ObjectLockConfiguration>>,
 	}
 
 	#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
@@ -228,6 +265,8 @@ mod v2 {
 					cors_config: x.cors_config,
 					lifecycle_config: x.lifecycle_config,
 					quotas: x.quotas,
+					versioning: crdt::Lww::new(BucketVersioning::default()),
+					object_lock_config: crdt::Lww::new(None),
 				}),
 			}
 		}
@@ -237,6 +276,10 @@ mod v2 {
 pub use v2::*;
 
 impl AutoCrdt for BucketQuotas {
+	const WARN_IF_DIFFERENT: bool = true;
+}
+
+impl AutoCrdt for BucketVersioning {
 	const WARN_IF_DIFFERENT: bool = true;
 }
 
@@ -252,6 +295,8 @@ impl BucketParams {
 			cors_config: crdt::Lww::new(None),
 			lifecycle_config: crdt::Lww::new(None),
 			quotas: crdt::Lww::new(BucketQuotas::default()),
+			versioning: crdt::Lww::new(BucketVersioning::default()),
+			object_lock_config: crdt::Lww::new(None),
 		}
 	}
 }
@@ -268,6 +313,8 @@ impl Crdt for BucketParams {
 		self.cors_config.merge(&o.cors_config);
 		self.lifecycle_config.merge(&o.lifecycle_config);
 		self.quotas.merge(&o.quotas);
+		self.versioning.merge(&o.versioning);
+		self.object_lock_config.merge(&o.object_lock_config);
 	}
 }
 

@@ -45,6 +45,13 @@ pub struct ListObjectsQuery {
 }
 
 #[derive(Debug)]
+pub struct ListObjectVersionsQuery {
+	pub key_marker: Option<String>,
+	pub version_id_marker: Option<String>,
+	pub common: ListQueryCommon,
+}
+
+#[derive(Debug)]
 pub struct ListMultipartUploadsQuery {
 	pub key_marker: Option<String>,
 	pub upload_id_marker: Option<String>,
@@ -153,6 +160,200 @@ pub async fn handle_list(
 			.collect(),
 		common_prefixes: acc
 			.common_prefixes
+			.iter()
+			.map(|pfx| s3_xml::CommonPrefix {
+				prefix: uriencode_maybe(pfx, query.common.urlencode_resp),
+			})
+			.collect(),
+	};
+
+	let xml = s3_xml::to_xml_with_header(&result)?;
+	Ok(Response::builder()
+		.header("Content-Type", "application/xml")
+		.body(string_body(xml))?)
+}
+
+pub async fn handle_list_object_versions(
+	ctx: ReqCtx,
+	query: &ListObjectVersionsQuery,
+) -> Result<Response<ResBody>, Error> {
+	let ReqCtx { garage, .. } = &ctx;
+
+	let io = |bucket, key, count| {
+		let t = &garage.object_table;
+		async move {
+			t.get_range(
+				&bucket,
+				key,
+				None, // No filter: return all objects including those with only delete markers
+				count,
+				EnumerationOrder::Forward,
+			)
+			.await
+		}
+	};
+
+	debug!("ListObjectVersions {:?}", query);
+
+	// Determine start position
+	let begin = match &query.key_marker {
+		Some(key) => RangeBegin::AfterKey {
+			key: key.to_string(),
+		},
+		None => RangeBegin::IncludingKey {
+			key: query.common.prefix.to_string(),
+			fallback_key: None,
+		},
+	};
+
+	let page_size = query.common.page_size;
+	let mut versions: Vec<s3_xml::VersionItem> = Vec::new();
+	let mut delete_markers: Vec<s3_xml::DeleteMarkerItem> = Vec::new();
+	let mut common_prefixes: BTreeSet<String> = BTreeSet::new();
+	let mut is_truncated = false;
+	let mut next_key_marker: Option<String> = None;
+	let mut next_version_id_marker: Option<String> = None;
+
+	let count = page_size + 1;
+	let mut cursor = begin;
+
+	'outer: loop {
+		let start_key = match &cursor {
+			RangeBegin::AfterKey { ref key }
+			| RangeBegin::AfterUpload { ref key, .. }
+			| RangeBegin::IncludingKey { ref key, .. } => Some(key.clone()),
+		};
+
+		let objects = io(query.common.bucket_id, start_key.clone(), count).await?;
+		let server_more = objects.len() >= count;
+
+		let mut iter = objects.iter().peekable();
+
+		// Drop first key if AfterKey
+		match (&cursor, iter.peek()) {
+			(RangeBegin::AfterKey { key }, Some(object)) if &object.key == key => {
+				iter.next();
+			}
+			_ => (),
+		};
+
+		while let Some(object) = iter.next() {
+			if !object.key.starts_with(&query.common.prefix) {
+				break 'outer;
+			}
+
+			// Check common prefix
+			if let Some(delimiter) = &query.common.delimiter {
+				if let Some(pos) = object.key[query.common.prefix.len()..].find(delimiter.as_str())
+				{
+					let pfx = &object.key[..query.common.prefix.len() + pos + delimiter.len()];
+					if common_prefixes.len() + versions.len() + delete_markers.len() >= page_size {
+						is_truncated = true;
+						next_key_marker = Some(object.key.clone());
+						break 'outer;
+					}
+					common_prefixes.insert(pfx.to_string());
+					cursor = RangeBegin::AfterKey {
+						key: object.key.clone(),
+					};
+					continue;
+				}
+			}
+
+			// Find the latest complete version to mark is_latest
+			let latest_complete = object
+				.versions()
+				.iter()
+				.rev()
+				.find(|v| v.is_complete())
+				.map(|v| v.uuid);
+
+			// Iterate all complete versions of this object
+			for version in object.versions().iter().rev() {
+				if !version.is_complete() {
+					continue;
+				}
+
+				if versions.len() + delete_markers.len() + common_prefixes.len() >= page_size {
+					is_truncated = true;
+					next_key_marker = Some(object.key.clone());
+					next_version_id_marker = Some(hex::encode(version.uuid));
+					break 'outer;
+				}
+
+				let is_latest = Some(version.uuid) == latest_complete;
+
+				match &version.state {
+					ObjectVersionState::Complete(ObjectVersionData::DeleteMarker) => {
+						delete_markers.push(s3_xml::DeleteMarkerItem {
+							key: uriencode_maybe(
+								&object.key,
+								query.common.urlencode_resp,
+							),
+							version_id: s3_xml::Value(hex::encode(version.uuid)),
+							is_latest: s3_xml::Value(is_latest.to_string()),
+							last_modified: s3_xml::Value(msec_to_rfc3339(version.timestamp)),
+						});
+					}
+					ObjectVersionState::Complete(ObjectVersionData::Inline(meta, _))
+					| ObjectVersionState::Complete(ObjectVersionData::FirstBlock(meta, _)) => {
+						versions.push(s3_xml::VersionItem {
+							key: uriencode_maybe(
+								&object.key,
+								query.common.urlencode_resp,
+							),
+							version_id: s3_xml::Value(hex::encode(version.uuid)),
+							is_latest: s3_xml::Value(is_latest.to_string()),
+							last_modified: s3_xml::Value(msec_to_rfc3339(version.timestamp)),
+							etag: s3_xml::Value(format!("\"{}\"", meta.etag)),
+							size: s3_xml::IntValue(meta.size as i64),
+							storage_class: s3_xml::Value("STANDARD".to_string()),
+						});
+					}
+					_ => {}
+				}
+			}
+
+			cursor = RangeBegin::AfterKey {
+				key: object.key.clone(),
+			};
+		}
+
+		if !server_more {
+			break;
+		}
+	}
+
+	let result = s3_xml::ListVersionsResult {
+		xmlns: (),
+		name: s3_xml::Value(query.common.bucket_name.to_string()),
+		prefix: uriencode_maybe(&query.common.prefix, query.common.urlencode_resp),
+		key_marker: query
+			.key_marker
+			.as_ref()
+			.map(|k| uriencode_maybe(k, query.common.urlencode_resp)),
+		version_id_marker: query
+			.version_id_marker
+			.as_ref()
+			.map(|v| s3_xml::Value(v.to_string())),
+		next_key_marker: next_key_marker
+			.as_ref()
+			.map(|k| uriencode_maybe(k, query.common.urlencode_resp)),
+		next_version_id_marker: next_version_id_marker.map(s3_xml::Value),
+		max_keys: s3_xml::IntValue(page_size as i64),
+		delimiter: query
+			.common
+			.delimiter
+			.as_ref()
+			.map(|x| uriencode_maybe(x, query.common.urlencode_resp)),
+		encoding_type: match query.common.urlencode_resp {
+			true => Some(s3_xml::Value("url".to_string())),
+			false => None,
+		},
+		is_truncated: s3_xml::Value(format!("{}", is_truncated)),
+		versions,
+		delete_markers,
+		common_prefixes: common_prefixes
 			.iter()
 			.map(|pfx| s3_xml::CommonPrefix {
 				prefix: uriencode_maybe(pfx, query.common.urlencode_resp),

@@ -2,18 +2,23 @@ use hyper::{Request, Response, StatusCode};
 
 use garage_util::data::*;
 
+use garage_model::bucket_table::BucketVersioning;
 use garage_model::s3::object_table::*;
 
 use garage_api_common::helpers::*;
 
 use crate::api_server::{ReqBody, ResBody};
 use crate::error::*;
+use crate::get::decode_version_id;
 use crate::put::next_timestamp;
 use crate::xml as s3_xml;
 
 async fn handle_delete_internal(ctx: &ReqCtx, key: &str) -> Result<(Uuid, Uuid), Error> {
 	let ReqCtx {
-		garage, bucket_id, ..
+		garage,
+		bucket_id,
+		bucket_params,
+		..
 	} = ctx;
 	let object = garage
 		.object_table
@@ -38,29 +43,133 @@ async fn handle_delete_internal(ctx: &ReqCtx, key: &str) -> Result<(Uuid, Uuid),
 		}
 	};
 
-	let object = Object::new(
-		*bucket_id,
-		key.into(),
-		vec![ObjectVersion {
+	let versioning = bucket_params.versioning.get();
+
+	// For unversioned/suspended buckets, deleting permanently aborts versions.
+	// This is not allowed on locked objects.
+	if *versioning != BucketVersioning::Enabled && object.is_locked() {
+		return Err(Error::ObjectLocked(
+			"Cannot permanently delete locked object".to_string(),
+		));
+	}
+
+	if *versioning == BucketVersioning::Enabled {
+		// Versioned bucket: create a delete marker (previous versions are preserved)
+		let object = Object::new(
+			*bucket_id,
+			key.into(),
+			vec![ObjectVersion {
+				uuid: del_uuid,
+				timestamp: del_timestamp,
+				state: ObjectVersionState::Complete(ObjectVersionData::DeleteMarker),
+			}],
+		);
+		garage.object_table.insert(&object).await?;
+	} else {
+		// Unversioned or suspended: permanently remove by marking all
+		// existing complete versions as Aborted, plus add a DeleteMarker
+		// that the CRDT merge will use to supersede them.
+		let mut versions: Vec<ObjectVersion> = object
+			.versions()
+			.iter()
+			.filter(|v| v.is_complete())
+			.map(|v| ObjectVersion {
+				uuid: v.uuid,
+				timestamp: v.timestamp,
+				state: ObjectVersionState::Aborted,
+			})
+			.collect();
+		versions.push(ObjectVersion {
 			uuid: del_uuid,
 			timestamp: del_timestamp,
 			state: ObjectVersionState::Complete(ObjectVersionData::DeleteMarker),
-		}],
-	);
-
-	garage.object_table.insert(&object).await?;
+		});
+		let object = Object::new(*bucket_id, key.into(), versions);
+		garage.object_table.insert(&object).await?;
+	}
 
 	Ok((deleted_version, del_uuid))
 }
 
-pub async fn handle_delete(ctx: ReqCtx, key: &str) -> Result<Response<ResBody>, Error> {
-	match handle_delete_internal(&ctx, key).await {
-		Ok(_) | Err(Error::NoSuchKey) => Ok(Response::builder()
-			.status(StatusCode::NO_CONTENT)
-			.body(empty_body())
-			.unwrap()),
-		Err(e) => Err(e),
+pub async fn handle_delete(
+	ctx: ReqCtx,
+	key: &str,
+	version_id: Option<String>,
+) -> Result<Response<ResBody>, Error> {
+	if let Some(vid) = version_id {
+		// Version-specific delete: permanently remove a specific version
+		handle_delete_version(&ctx, key, &vid).await
+	} else {
+		// Normal delete: create a delete marker
+		match handle_delete_internal(&ctx, key).await {
+			Ok((_deleted_version, del_uuid)) => Ok(Response::builder()
+				.status(StatusCode::NO_CONTENT)
+				.header("x-amz-version-id", hex::encode(del_uuid))
+				.header("x-amz-delete-marker", "true")
+				.body(empty_body())
+				.unwrap()),
+			Err(Error::NoSuchKey) => Ok(Response::builder()
+				.status(StatusCode::NO_CONTENT)
+				.body(empty_body())
+				.unwrap()),
+			Err(e) => Err(e),
+		}
 	}
+}
+
+async fn handle_delete_version(
+	ctx: &ReqCtx,
+	key: &str,
+	version_id: &str,
+) -> Result<Response<ResBody>, Error> {
+	let ReqCtx {
+		garage, bucket_id, ..
+	} = ctx;
+
+	let target_uuid = decode_version_id(version_id)?;
+
+	let object = garage
+		.object_table
+		.get(bucket_id, &key.to_string())
+		.await?
+		.ok_or(Error::NoSuchKey)?;
+
+	let target_version = object
+		.versions()
+		.iter()
+		.find(|v| v.uuid == target_uuid)
+		.ok_or(Error::NoSuchKey)?;
+
+	// Check object lock before allowing version deletion
+	if object.is_locked() {
+		return Err(Error::ObjectLocked(
+			"Cannot delete version: object is locked".to_string(),
+		));
+	}
+
+	let is_delete_marker = matches!(
+		&target_version.state,
+		ObjectVersionState::Complete(ObjectVersionData::DeleteMarker)
+	);
+
+	// Mark the version as Aborted to remove it
+	let aborted = ObjectVersion {
+		uuid: target_uuid,
+		timestamp: target_version.timestamp,
+		state: ObjectVersionState::Aborted,
+	};
+	let obj = Object::new(*bucket_id, key.into(), vec![aborted]);
+	garage.object_table.insert(&obj).await?;
+
+	let mut resp = Response::builder()
+		.status(StatusCode::NO_CONTENT)
+		.header("x-amz-version-id", hex::encode(target_uuid));
+
+	if is_delete_marker {
+		resp = resp.header("x-amz-delete-marker", "true");
+	}
+
+	Ok(resp.body(empty_body()).unwrap())
 }
 
 pub async fn handle_delete_objects(

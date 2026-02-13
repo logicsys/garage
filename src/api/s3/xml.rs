@@ -308,6 +308,68 @@ pub struct ListBucketResult {
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct ListVersionsResult {
+	#[serde(serialize_with = "xmlns_tag")]
+	pub xmlns: (),
+	#[serde(rename = "Name")]
+	pub name: Value,
+	#[serde(rename = "Prefix")]
+	pub prefix: Value,
+	#[serde(rename = "KeyMarker")]
+	pub key_marker: Option<Value>,
+	#[serde(rename = "VersionIdMarker")]
+	pub version_id_marker: Option<Value>,
+	#[serde(rename = "NextKeyMarker")]
+	pub next_key_marker: Option<Value>,
+	#[serde(rename = "NextVersionIdMarker")]
+	pub next_version_id_marker: Option<Value>,
+	#[serde(rename = "MaxKeys")]
+	pub max_keys: IntValue,
+	#[serde(rename = "Delimiter")]
+	pub delimiter: Option<Value>,
+	#[serde(rename = "EncodingType")]
+	pub encoding_type: Option<Value>,
+	#[serde(rename = "IsTruncated")]
+	pub is_truncated: Value,
+	#[serde(rename = "Version")]
+	pub versions: Vec<VersionItem>,
+	#[serde(rename = "DeleteMarker")]
+	pub delete_markers: Vec<DeleteMarkerItem>,
+	#[serde(rename = "CommonPrefixes")]
+	pub common_prefixes: Vec<CommonPrefix>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct VersionItem {
+	#[serde(rename = "Key")]
+	pub key: Value,
+	#[serde(rename = "VersionId")]
+	pub version_id: Value,
+	#[serde(rename = "IsLatest")]
+	pub is_latest: Value,
+	#[serde(rename = "LastModified")]
+	pub last_modified: Value,
+	#[serde(rename = "ETag")]
+	pub etag: Value,
+	#[serde(rename = "Size")]
+	pub size: IntValue,
+	#[serde(rename = "StorageClass")]
+	pub storage_class: Value,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct DeleteMarkerItem {
+	#[serde(rename = "Key")]
+	pub key: Value,
+	#[serde(rename = "VersionId")]
+	pub version_id: Value,
+	#[serde(rename = "IsLatest")]
+	pub is_latest: Value,
+	#[serde(rename = "LastModified")]
+	pub last_modified: Value,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct VersioningConfiguration {
 	#[serde(serialize_with = "xmlns_tag")]
 	pub xmlns: (),

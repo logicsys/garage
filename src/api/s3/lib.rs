@@ -17,5 +17,6 @@ mod put;
 pub mod website;
 
 mod encryption;
+mod object_lock;
 mod router;
 pub mod xml;

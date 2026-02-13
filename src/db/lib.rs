@@ -60,6 +60,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct TxOpError(pub(crate) Error);
 pub type TxOpResult<T> = std::result::Result<T, TxOpError>;
 
+impl TxOpError {
+	pub fn new(msg: impl Into<Cow<'static, str>>) -> Self {
+		TxOpError(Error(msg.into()))
+	}
+}
+
 #[derive(Debug)]
 pub enum TxError<E> {
 	Abort(E),

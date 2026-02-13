@@ -60,7 +60,8 @@ fn object_headers(
 
 	let mut resp = Response::builder()
 		.header(LAST_MODIFIED, date_str)
-		.header(ACCEPT_RANGES, "bytes".to_string());
+		.header(ACCEPT_RANGES, "bytes".to_string())
+		.header("x-amz-version-id", hex::encode(version.uuid));
 
 	if !version_meta.etag.is_empty() {
 		resp = resp.header(ETAG, format!("\"{}\"", version_meta.etag));
@@ -136,14 +137,38 @@ fn handle_http_precondition(
 	}
 }
 
+fn add_object_lock_headers(
+	resp: http::response::Builder,
+	object: &Object,
+) -> http::response::Builder {
+	let mut resp = resp;
+	if let Some(retention) = object.retention.get() {
+		let mode = match retention.mode {
+			ObjectRetentionMode::Governance => "GOVERNANCE",
+			ObjectRetentionMode::Compliance => "COMPLIANCE",
+		};
+		resp = resp
+			.header("x-amz-object-lock-mode", mode)
+			.header(
+				"x-amz-object-lock-retain-until-date",
+				garage_util::time::msec_to_rfc3339(retention.retain_until),
+			);
+	}
+	if let Some(true) = object.legal_hold.get() {
+		resp = resp.header("x-amz-object-lock-legal-hold", "ON");
+	}
+	resp
+}
+
 /// Handle HEAD request
 pub async fn handle_head(
 	ctx: ReqCtx,
 	req: &Request<()>,
 	key: &str,
 	part_number: Option<u64>,
+	version_id: Option<String>,
 ) -> Result<Response<ResBody>, Error> {
-	handle_head_without_ctx(ctx.garage, req, ctx.bucket_id, key, part_number).await
+	handle_head_without_ctx(ctx.garage, req, ctx.bucket_id, key, part_number, version_id).await
 }
 
 /// Handle HEAD request for website
@@ -153,6 +178,7 @@ pub async fn handle_head_without_ctx(
 	bucket_id: Uuid,
 	key: &str,
 	part_number: Option<u64>,
+	version_id: Option<String>,
 ) -> Result<Response<ResBody>, Error> {
 	let object = garage
 		.object_table
@@ -160,12 +186,21 @@ pub async fn handle_head_without_ctx(
 		.await?
 		.ok_or(Error::NoSuchKey)?;
 
-	let object_version = object
-		.versions()
-		.iter()
-		.rev()
-		.find(|v| v.is_data())
-		.ok_or(Error::NoSuchKey)?;
+	let object_version = if let Some(vid) = version_id {
+		let uuid = decode_version_id(&vid)?;
+		object
+			.versions()
+			.iter()
+			.find(|v| v.uuid == uuid)
+			.ok_or(Error::NoSuchKey)?
+	} else {
+		object
+			.versions()
+			.iter()
+			.rev()
+			.find(|v| v.is_data())
+			.ok_or(Error::NoSuchKey)?
+	};
 
 	let version_data = match &object_version.state {
 		ObjectVersionState::Complete(c) => c,
@@ -249,7 +284,7 @@ pub async fn handle_head_without_ctx(
 			_ => unreachable!(),
 		}
 	} else {
-		Ok(object_headers(
+		let resp = object_headers(
 			object_version,
 			version_meta,
 			&headers,
@@ -257,8 +292,9 @@ pub async fn handle_head_without_ctx(
 			checksum_mode,
 		)
 		.header(CONTENT_LENGTH, format!("{}", version_meta.size))
-		.status(StatusCode::OK)
-		.body(empty_body())?)
+		.status(StatusCode::OK);
+		let resp = add_object_lock_headers(resp, &object);
+		Ok(resp.body(empty_body())?)
 	}
 }
 
@@ -269,8 +305,10 @@ pub async fn handle_get(
 	key: &str,
 	part_number: Option<u64>,
 	overrides: GetObjectOverrides,
+	version_id: Option<String>,
 ) -> Result<Response<ResBody>, Error> {
-	handle_get_without_ctx(ctx.garage, req, ctx.bucket_id, key, part_number, overrides).await
+	handle_get_without_ctx(ctx.garage, req, ctx.bucket_id, key, part_number, overrides, version_id)
+		.await
 }
 
 /// Handle GET request
@@ -281,6 +319,7 @@ pub async fn handle_get_without_ctx(
 	key: &str,
 	part_number: Option<u64>,
 	overrides: GetObjectOverrides,
+	version_id: Option<String>,
 ) -> Result<Response<ResBody>, Error> {
 	let object = garage
 		.object_table
@@ -288,19 +327,33 @@ pub async fn handle_get_without_ctx(
 		.await?
 		.ok_or(Error::NoSuchKey)?;
 
-	let last_v = object
-		.versions()
-		.iter()
-		.rev()
-		.find(|v| v.is_complete())
-		.ok_or(Error::NoSuchKey)?;
+	let last_v = if let Some(vid) = version_id {
+		let uuid = decode_version_id(&vid)?;
+		object
+			.versions()
+			.iter()
+			.find(|v| v.uuid == uuid)
+			.ok_or(Error::NoSuchKey)?
+	} else {
+		object
+			.versions()
+			.iter()
+			.rev()
+			.find(|v| v.is_complete())
+			.ok_or(Error::NoSuchKey)?
+	};
 
 	let last_v_data = match &last_v.state {
 		ObjectVersionState::Complete(x) => x,
-		_ => unreachable!(),
+		_ => return Err(Error::NoSuchKey),
 	};
 	let last_v_meta = match last_v_data {
-		ObjectVersionData::DeleteMarker => return Err(Error::NoSuchKey),
+		ObjectVersionData::DeleteMarker => {
+			// For version-specific requests, return 405 for delete markers per S3 spec
+			return Err(Error::bad_request(
+				"The specified version is a delete marker",
+			));
+		}
 		ObjectVersionData::Inline(meta, _) => meta,
 		ObjectVersionData::FirstBlock(meta, _) => meta,
 	};
@@ -889,4 +942,15 @@ impl PreconditionHeaders {
 			None => Ok(()),
 		}
 	}
+}
+
+/// Decode a version ID from its hex-encoded UUID string
+pub(crate) fn decode_version_id(version_id: &str) -> Result<Uuid, Error> {
+	let bytes = hex::decode(version_id).map_err(|_| Error::bad_request("Invalid version ID"))?;
+	if bytes.len() != 32 {
+		return Err(Error::bad_request("Invalid version ID length"));
+	}
+	let mut arr = [0u8; 32];
+	arr.copy_from_slice(&bytes);
+	Ok(Uuid::from(arr))
 }

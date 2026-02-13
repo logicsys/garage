@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use hyper::{Request, Response, StatusCode};
 
 use garage_model::bucket_alias_table::*;
-use garage_model::bucket_table::Bucket;
+use garage_model::bucket_table::*;
 use garage_model::garage::Garage;
 use garage_model::key_table::{Key, KeyParams};
 use garage_model::permission::BucketKeyPerm;
-use garage_table::util::*;
+use garage_table::EmptyKey;
 use garage_util::crdt::*;
 use garage_util::time::*;
 
@@ -31,10 +31,16 @@ pub fn handle_get_bucket_location(ctx: ReqCtx) -> Result<Response<ResBody>, Erro
 		.body(string_body(xml))?)
 }
 
-pub fn handle_get_bucket_versioning() -> Result<Response<ResBody>, Error> {
+pub fn handle_get_bucket_versioning(ctx: &ReqCtx) -> Result<Response<ResBody>, Error> {
+	let status = match ctx.bucket_params.versioning.get() {
+		BucketVersioning::Enabled => Some(s3_xml::Value("Enabled".to_string())),
+		BucketVersioning::Suspended => Some(s3_xml::Value("Suspended".to_string())),
+		BucketVersioning::Unversioned => None,
+	};
+
 	let versioning = s3_xml::VersioningConfiguration {
 		xmlns: (),
-		status: None,
+		status,
 	};
 
 	let xml = s3_xml::to_xml_with_header(&versioning)?;
@@ -42,6 +48,64 @@ pub fn handle_get_bucket_versioning() -> Result<Response<ResBody>, Error> {
 	Ok(Response::builder()
 		.header("Content-Type", "application/xml")
 		.body(string_body(xml))?)
+}
+
+pub async fn handle_put_bucket_versioning(
+	ctx: ReqCtx,
+	req: Request<ReqBody>,
+) -> Result<Response<ResBody>, Error> {
+	let body = req.into_body().collect().await?;
+	let conf_xml = roxmltree::Document::parse(std::str::from_utf8(&body)?)?;
+
+	let status = conf_xml
+		.root()
+		.first_child()
+		.and_then(|vc| {
+			if !vc.has_tag_name("VersioningConfiguration") {
+				return None;
+			}
+			vc.children().find(|c| c.has_tag_name("Status"))
+		})
+		.and_then(|s| s.text())
+		.ok_or_bad_request("Missing Status element in VersioningConfiguration")?;
+
+	let current = ctx.bucket_params.versioning.get().clone();
+
+	let new_versioning = match status {
+		"Enabled" => BucketVersioning::Enabled,
+		"Suspended" => BucketVersioning::Suspended,
+		_ => return Err(Error::bad_request(format!("Invalid versioning status: {}", status))),
+	};
+
+	// Validate transitions: cannot go back to Unversioned
+	match (&current, &new_versioning) {
+		(BucketVersioning::Unversioned, BucketVersioning::Enabled) => {}
+		(BucketVersioning::Enabled, BucketVersioning::Suspended) => {}
+		(BucketVersioning::Suspended, BucketVersioning::Enabled) => {}
+		(a, b) if a == b => {}
+		_ => {
+			return Err(Error::bad_request(format!(
+				"Invalid versioning state transition from {:?} to {:?}",
+				current, new_versioning
+			)));
+		}
+	}
+
+	let mut bucket = ctx
+		.garage
+		.bucket_table
+		.get(&EmptyKey, &ctx.bucket_id)
+		.await?
+		.ok_or_internal_error("Bucket not found")?;
+
+	if let Some(params) = bucket.params_mut() {
+		params.versioning.update(new_versioning);
+	}
+	ctx.garage.bucket_table.insert(&bucket).await?;
+
+	Ok(Response::builder()
+		.status(StatusCode::OK)
+		.body(empty_body())?)
 }
 
 pub fn handle_get_bucket_acl(ctx: ReqCtx) -> Result<Response<ResBody>, Error> {
@@ -171,6 +235,12 @@ pub async fn handle_create_bucket(
 	api_key_id: &String,
 	bucket_name: String,
 ) -> Result<Response<ResBody>, Error> {
+	let object_lock_enabled = req
+		.headers()
+		.get("x-amz-bucket-object-lock-enabled")
+		.map(|v| v.to_str().unwrap_or("").eq_ignore_ascii_case("true"))
+		.unwrap_or(false);
+
 	let body = req.into_body().collect().await?;
 
 	let cmd =
@@ -223,7 +293,18 @@ pub async fn handle_create_bucket(
 			)));
 		}
 
-		let bucket = Bucket::new();
+		let mut bucket = Bucket::new();
+
+		if object_lock_enabled {
+			if let Some(params) = bucket.params_mut() {
+				params.versioning.update(BucketVersioning::Enabled);
+				params.object_lock_config.update(Some(ObjectLockConfiguration {
+					enabled: true,
+					default_retention: None,
+				}));
+			}
+		}
+
 		garage.bucket_table.insert(&bucket).await?;
 
 		helper
